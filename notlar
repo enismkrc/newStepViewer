@@ -1,0 +1,11 @@
+.component-item.inactive {
+  opacity: 0.4;
+  background: #f8f9fa;
+  border-color: #dee2e6;
+  cursor: not-allowed;
+}
+
+.component-item.inactive .component-name {
+  text-decoration: line-through;
+  color: #999;
+}
