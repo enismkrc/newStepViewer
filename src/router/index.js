@@ -3,9 +3,15 @@ import { createRouter, createWebHistory } from 'vue-router'
 const routes = [
   {
     path: '/',
-    name: 'Dashboard',
-    component: () => import('../views/HmsDashboard.vue'),
-    meta: { title: 'Health Management System' }
+    name: 'Entry',
+    component: () => import('../views/HmsEntry.vue'),
+    meta: { title: 'Aircraft Selection' }
+  },
+  {
+    path: '/view/:aircraftId',
+    name: 'View',
+    component: () => import('../views/HmsViewerPage.vue'),
+    meta: { title: 'Model View' }
   },
   {
     path: '/import',

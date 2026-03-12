@@ -3,7 +3,7 @@
     <header class="app-header">
       <div class="app-brand">Health Management System</div>
       <nav class="app-nav">
-        <router-link to="/" class="nav-link" active-class="nav-link-active">Dashboard</router-link>
+        <router-link to="/" class="nav-link" active-class="nav-link-active">Selection</router-link>
         <router-link to="/import" class="nav-link" active-class="nav-link-active">Model Import</router-link>
       </nav>
     </header>

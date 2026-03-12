@@ -5,6 +5,9 @@
 export const aircraftList = [
   {
     id: 'aircraft-1',
+    country: 'USA',
+    city: 'Fort Worth',
+    fleet: 'Training Fleet',
     tailNumber: 'F-35A-01',
     displayName: 'F-35A 01',
     modelUrl: '/F35_converted.json',
@@ -16,6 +19,9 @@ export const aircraftList = [
   },
   {
     id: 'aircraft-2',
+    country: 'USA',
+    city: 'Fort Worth',
+    fleet: 'Training Fleet',
     tailNumber: 'F-35A-02',
     displayName: 'F-35A 02',
     modelUrl: '/F35_converted.json',
@@ -25,6 +31,9 @@ export const aircraftList = [
   },
   {
     id: 'aircraft-3',
+    country: 'USA',
+    city: 'Edwards AFB',
+    fleet: 'Operational Fleet',
     tailNumber: 'F-35A-03',
     displayName: 'F-35A 03',
     modelUrl: '/F35_converted.json',
@@ -34,6 +43,9 @@ export const aircraftList = [
   },
   {
     id: 'aircraft-4',
+    country: 'UK',
+    city: 'RAF Marham',
+    fleet: 'Operational Fleet',
     tailNumber: 'F-35A-04',
     displayName: 'F-35A 04',
     modelUrl: '/F35_converted.json',
