@@ -505,7 +505,8 @@ function isolatePart(mesh) {
   partDetailPanelOpen.value = true
   isIsolated.value = true
   const bbox = new THREE.Box3().setFromObject(mesh)
-  if (!bbox.isEmpty()) focusToBox(bbox, 4.2)
+  // Bring the selected part closer in view.
+  if (!bbox.isEmpty()) focusToBox(bbox, 1.2)
 }
 
 function showAllParts() {
