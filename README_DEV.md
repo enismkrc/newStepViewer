@@ -48,10 +48,8 @@ If you are new, open in this order:
 Supporting/legacy modules:
 - `src/views/ImportTool.vue` -> uses `StepUploadViewer`
 - `src/components/StepUploadViewer.vue` -> converter + preview tool
-- `src/components/StepViewer.vue` -> legacy demo viewer
-- `src/components/ViewerModule.vue` -> JSON-only viewer utility
-- `src/components/ConvertModule.vue` -> CAD->JSON utility
-- `src/components/OcctImportDemo.vue` -> experimental playground
+ 
+Note: older demo components were removed to keep the repo lean.
 
 ## 4) Critical Logic You Must Know
 
@@ -140,3 +138,78 @@ When moving from mock to real backend:
 - Keep UI contract stable (`id/country/city/fleet/tailNumber/modelUrl/faultyPart...`)
 - Introduce service layer (`src/services/aircraftService.js`)
 - Keep `HmsEntry` and `HmsViewerPage` consuming normalized data shape
+
+## 10) Fault Highlight Pipeline (Step-by-step)
+
+This section explains, in order, how the app goes from an aircraft selection to a red-highlighted faulty part in the 3D viewer.
+
+### Step 1 — User selects an aircraft (Entry page)
+- File: `src/views/HmsEntry.vue`
+- The entry page builds a hierarchy from `aircraftList` and finally shows aircraft cards.
+- Clicking a card navigates to the viewer route using the aircraft id:
+  - `router.push({ name: 'View', params: { aircraftId } })`
+
+### Step 2 — Viewer page resolves `aircraftId` into an aircraft record
+- File: `src/views/HmsViewerPage.vue`
+- Route: `/view/:aircraftId`
+- The viewer page reads `route.params.aircraftId`, finds the matching record in `aircraftList`, and passes these into `HmsViewer`:
+  - `modelUrl` (which model JSON to load)
+  - `faultyPart` (string part name)
+  - `faultType` (optional, affects overlay text)
+  - `detailModelUrl` / `detailFaultyPart` (optional, for switching to a detail model)
+
+### Step 3 — `HmsViewer` loads the model JSON
+- File: `src/components/HmsViewer.vue`
+- Function: `loadModelFromUrl(url)`
+- Process:
+  - `fetch(url)` -> `text()` -> `JSON.parse(text)`
+  - Validate that `data.meshes` exists
+  - Call `renderImported(data)`
+
+### Step 4 — Part names are read from mesh JSON and stored on each Three.js mesh
+- File: `src/components/HmsViewer.vue`
+- Function: `renderImported(importResult)`
+- For each mesh entry in the JSON:
+  - Part name is taken from `meshData.name` (fallback to a generated name if missing)
+  - It is stored as: `mesh.userData.partName = partName`
+
+This `mesh.userData.partName` is the key used everywhere for matching/highlighting/labels.
+
+### Step 5 — Faulty part name is injected via props and activates highlight
+- `HmsViewer` receives `props.faultyPart` from the selected aircraft record.
+- After rendering meshes, the viewer sets:
+  - `faultyPartName.value = props.faultyPart ?? ''`
+  - `transparentOthers.value = true` (when a faulty part exists, to make the red highlight clearer)
+  - then calls `updateFaultyHighlight()`
+
+### Step 6 — Red highlight is applied by comparing mesh part names
+- File: `src/components/HmsViewer.vue`
+- Function: `applyPartStyle(mesh)`
+- Fault condition:
+  - `mesh.userData.partName === faultyPartName.value`
+- Fault style:
+  - red diffuse: `mat.color.setHex(0xdc2626)`
+  - red emissive: `mat.emissive.setHex(0xb91c1c)`
+
+`updateFaultyHighlight()` traverses the model and calls `applyPartStyle` for each mesh.
+
+### Step 7 — Fault overlay card (FIN / status / warnings) is derived from `faultyPartName`
+- File: `src/components/HmsViewer.vue`
+- Computed: `faultCardData`
+- This is currently demo UI data (not from backend).
+- Its screen position is updated every frame in `loop()` by projecting the faulty part's bounding box center into screen coordinates.
+
+### Step 8 — Clicking a part isolates it and zooms camera to it
+- File: `src/components/HmsViewer.vue`
+- Click handler: `onPointerDown()`
+- Action:
+  - `isolatePart(clickedMesh)` hides other meshes
+  - `focusToBox(bbox, distanceMultiplier)` fits camera to the selected mesh
+  - smaller `distanceMultiplier` => closer zoom
+
+### Step 9 (optional) — Switch to detail model when clicking the faulty part
+- File: `src/components/HmsViewer.vue`
+- In `onPointerDown()`, if:
+  - `detailModelUrl` and `detailFaultyPart` exist, and
+  - user clicked the current faulty part,
+then the viewer loads the detail model and updates `faultyPartName` to the detail part name.
