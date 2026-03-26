@@ -76,11 +76,34 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 
+/**
+ * HMS (Health Management System) viewer (Three.js)
+ *
+ * Main responsibilities:
+ * - Load a JSON mesh bundle from `modelUrl` (exported by the OCCT import tool).
+ * - Highlight the "faulty" part in red. The faulty part name comes from `props.faultyPart`,
+ *   which is set by the selected aircraft record (see `src/data/aircraft.js`).
+ * - Allow interaction: hover highlight, click to isolate a part and zoom camera to it.
+ * - Optional: if `detailModelUrl` is provided, clicking the faulty part can switch to a deeper/detail model.
+ */
 const props = defineProps({
   modelUrl: { type: String, default: '/F35_converted.json' },
+  /**
+   * Name of the part that should be treated as "faulty" and highlighted in red.
+   * This is passed from the parent page (selected aircraft).
+   */
   faultyPart: { type: String, default: null },
+  /**
+   * Optional fault type. Used by UI text for the fault overlay card.
+   */
   faultType: { type: String, default: null },
+  /**
+   * Optional: a second model URL for a detailed view (e.g. engine-only model).
+   */
   detailModelUrl: { type: String, default: null },
+  /**
+   * Optional: the faulty part name inside the detail model.
+   */
   detailFaultyPart: { type: String, default: null }
 })
 
@@ -103,6 +126,8 @@ const transparentOthers = ref(false)
 const isDetailView = ref(false)
 
 const faultCardData = computed(() => {
+  // Overlay label content for the faulty part (demo data).
+  // This is derived from `faultyPartName` (current faulty part name in the loaded model).
   const part = faultyPartName.value
   if (!part) return null
   const isFrontLG = part === 'Front LG' || /front\s*lg|nose\s*gear/i.test(part)
@@ -208,6 +233,7 @@ const partDetailData = computed(() => {
 })
 
 watch(faultyPartName, () => {
+  // If we have a faulty part, default to making non-faulty parts semi-transparent.
   if (!faultyPartName.value) transparentOthers.value = false
   else transparentOthers.value = true
   updateFaultyHighlight()
@@ -307,6 +333,7 @@ function loop() {
   controls?.update()
 
   if (faultyPartName.value && modelGroup && camera && canvasEl.value) {
+    // Compute 2D screen position for the faulty-part overlay label (FIN/status/warnings).
     const isViewingFaultyPart = !isIsolated.value || (isolatedMesh && isolatedMesh.userData.partName === faultyPartName.value)
     if (!isViewingFaultyPart) {
       faultLabelScreen.value = { x: 0, y: 0, visible: false }
@@ -378,6 +405,7 @@ function applyPartStyle(mesh) {
   if (!mat || !mat.isMeshStandardMaterial) return
   const isFaulty = faultyPartName.value && mesh.userData.partName === faultyPartName.value
   if (isFaulty) {
+    // Fault highlight color (red) is applied here.
     mat.color.setHex(0xdc2626)
     mat.emissive.setHex(0xb91c1c)
     mat.emissiveIntensity = 0.7
@@ -484,6 +512,7 @@ function onPointerDown(event) {
     return
   }
   if (!isDetailView.value && props.detailModelUrl && props.detailFaultyPart && clickedPartName === faultyPartName.value) {
+    // Detail-view switch: when user clicks the faulty part, swap to the detail model.
     isDetailView.value = true
     loadModelFromUrl(props.detailModelUrl).then(() => {
       faultyPartName.value = props.detailFaultyPart
@@ -505,7 +534,10 @@ function isolatePart(mesh) {
   partDetailPanelOpen.value = true
   isIsolated.value = true
   const bbox = new THREE.Box3().setFromObject(mesh)
-  // Bring the selected part closer in view.
+  // Zoom/fit behavior when a mesh is clicked:
+  // - We isolate the mesh (hide others)
+  // - Then we fit the camera to the mesh bounding box via `focusToBox`
+  // - Smaller multiplier => closer zoom
   if (!bbox.isEmpty()) focusToBox(bbox, 1.2)
 }
 
@@ -546,6 +578,9 @@ function toggleWireframe() {
 }
 
 function focusToBox(bbox, distanceMultiplier = 4.0) {
+  // Camera fit helper. Used for:
+  // - initial load (fit entire model)
+  // - isolate part (fit selected part)
   if (!camera || !controls) return
   const center = new THREE.Vector3()
   const size = new THREE.Vector3()

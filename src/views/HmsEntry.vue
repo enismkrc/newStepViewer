@@ -90,11 +90,20 @@ import { aircraftList } from '../data/aircraft'
 
 const router = useRouter()
 
+/**
+ * Hierarchical selection is derived from the aircraft list:
+ * Country -> City -> Fleet -> Aircraft
+ *
+ * Today this is fed by mock data (`src/data/aircraft.js`).
+ * Later, to switch to a backend, replace the `aircraftList` import with an API call that
+ * fills a reactive array, and keep the computed selectors below unchanged.
+ */
 const selectedCountry = ref('')
 const selectedCity = ref('')
 const selectedFleet = ref('')
 
 function goToView(aircraftId) {
+  // Viewer route receives only the aircraft id. Viewer page then finds the record by id.
   router.push({ name: 'View', params: { aircraftId } })
 }
 
@@ -130,6 +139,7 @@ const fleets = computed(() => {
 
 const filteredAircraftSorted = computed(() => {
   if (!selectedCountry.value || !selectedCity.value || !selectedFleet.value) return []
+  // Tail Number list is shown only after Fleet is selected.
   return aircraftList
     .filter((ac) => (ac.country || 'Unknown') === selectedCountry.value)
     .filter((ac) => (ac.city || 'Unknown') === selectedCity.value)

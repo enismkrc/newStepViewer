@@ -32,6 +32,8 @@ import HmsViewer from '../components/HmsViewer.vue'
 const route = useRoute()
 
 const aircraft = computed(() => {
+  // The viewer page is routed as `/view/:aircraftId`.
+  // Here we map that route param back into an aircraft record.
   const id = route.params.aircraftId
   return aircraftList.find((ac) => ac.id === id) ?? null
 })
