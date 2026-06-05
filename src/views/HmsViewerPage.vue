@@ -17,6 +17,7 @@
           :fault-type="aircraft.faultType"
           :detail-model-url="aircraft.detailModelUrl"
           :detail-faulty-part="aircraft.detailFaultyPart"
+          :fault-markers="aircraft.faultMarkers"
         />
       </div>
     </template>
