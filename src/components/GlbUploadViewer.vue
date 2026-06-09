@@ -21,6 +21,9 @@
         <button class="btn" :disabled="!modelLoaded" @click="toggleWireframe">
           {{ wireframe ? 'Solid' : 'Wireframe' }}
         </button>
+        <button class="btn" :class="{ active: treeOpen }" :disabled="!modelLoaded || !modelTree.length" @click="treeOpen = !treeOpen">
+          Model tree
+        </button>
         <button v-if="isIsolated" class="btn btn-back" @click="showAllParts">
           ← Show all
         </button>
@@ -30,11 +33,11 @@
       </div>
     </header>
 
-    <div class="fault-row" v-if="modelLoaded && partNames.length">
+    <div class="fault-row" v-if="modelLoaded && allNodeNames.length">
       <label class="fault-label">Faulty part:</label>
       <select v-model="faultyPartName" class="fault-select">
         <option value="">None</option>
-        <option v-for="p in partNames" :key="p" :value="p">{{ p }}</option>
+        <option v-for="p in allNodeNames" :key="p" :value="p">{{ p }}</option>
       </select>
       <label v-if="faultyPartName" class="fault-check">
         <input type="checkbox" v-model="transparentOthers" />
@@ -51,6 +54,35 @@
     <div class="stage-wrapper" :class="{ 'stage-wrapper-split': isIsolated && partDetailData && partDetailPanelOpen }">
       <div class="stage" ref="stageRef">
         <canvas ref="canvasEl" class="canvas"></canvas>
+
+        <div v-if="treeOpen && modelTree.length" class="tree-panel">
+          <div class="tree-panel-header">
+            <span class="tree-panel-title">Model tree</span>
+            <div class="tree-panel-actions">
+              <button type="button" class="tree-mini-btn" title="Expand all" @click="expandAllNodes">+</button>
+              <button type="button" class="tree-mini-btn" title="Collapse all" @click="collapseAllNodes">−</button>
+              <button type="button" class="tree-mini-btn" title="Close" @click="treeOpen = false">×</button>
+            </div>
+          </div>
+          <div class="tree-list">
+            <div
+              v-for="row in flatTree"
+              :key="row.id"
+              class="tree-row"
+              :class="{ selected: faultyPartName === row.partName }"
+              :style="{ paddingLeft: 6 + row.depth * 14 + 'px' }"
+            >
+              <button
+                v-if="row.hasChildren"
+                type="button"
+                class="tree-arrow"
+                @click="toggleNode(row.id)"
+              >{{ row.isExpanded ? '▾' : '▸' }}</button>
+              <span v-else class="tree-arrow tree-arrow-empty"></span>
+              <span class="tree-name" :title="row.name" @click="selectTreeNode(row)">{{ row.name }}</span>
+            </div>
+          </div>
+        </div>
         <div
           v-if="faultLabelScreen.visible && faultCardData"
           class="fault-label-overlay"
@@ -115,6 +147,39 @@ const faultyPartName = ref('')
 const stageRef = ref(null)
 const faultLabelScreen = ref({ x: 0, y: 0, visible: false })
 const transparentOthers = ref(false)
+
+// Model tree (glTF node hierarchy) shown as a collapsible panel.
+const modelTree = ref([])
+const expandedNodes = ref(new Set())
+const treeOpen = ref(false)
+
+/** Flatten the tree into rows for rendering, honoring each node's expanded state. */
+const flatTree = computed(() => {
+  const out = []
+  const walk = (nodes, depth) => {
+    for (const n of nodes) {
+      const hasChildren = n.children && n.children.length > 0
+      const isExpanded = expandedNodes.value.has(n.id)
+      out.push({ id: n.id, name: n.name, partName: n.partName, depth, hasChildren, isExpanded })
+      if (hasChildren && isExpanded) walk(n.children, depth + 1)
+    }
+  }
+  walk(modelTree.value, 0)
+  return out
+})
+
+/** All node names (assemblies + leaves) for the "Faulty part" dropdown. */
+const allNodeNames = computed(() => {
+  const set = new Set()
+  const walk = (nodes) => {
+    for (const n of nodes) {
+      if (n.name) set.add(n.name)
+      if (n.children) walk(n.children)
+    }
+  }
+  walk(modelTree.value)
+  return Array.from(set).sort((a, b) => a.localeCompare(b))
+})
 
 const faultCardData = computed(() => {
   const part = faultyPartName.value
@@ -270,13 +335,13 @@ function loop() {
   controls?.update()
 
   if (faultyPartName.value && modelGroup && camera && canvasEl.value) {
-    const isViewingFaultyPart = !isIsolated.value || (isolatedMesh && isolatedMesh.userData.partName === faultyPartName.value)
+    const isViewingFaultyPart = !isIsolated.value || meshMatchesPart(isolatedMesh, faultyPartName.value)
     if (!isViewingFaultyPart) {
       faultLabelScreen.value = { x: 0, y: 0, visible: false }
     } else {
       const bbox = new THREE.Box3()
       modelGroup.traverse((obj) => {
-        if (obj.isMesh && obj.userData.partName === faultyPartName.value) bbox.union(new THREE.Box3().setFromObject(obj))
+        if (obj.isMesh && meshMatchesPart(obj, faultyPartName.value)) bbox.union(new THREE.Box3().setFromObject(obj))
       })
       if (!bbox.isEmpty()) {
         bbox.getCenter(worldPos)
@@ -328,6 +393,8 @@ function clearModel() {
   meshesCount.value = 0
   partNames.value = []
   faultyPartName.value = ''
+  modelTree.value = []
+  expandedNodes.value = new Set()
   isIsolated.value = false
   isolatedPartName.value = ''
   partDetailPanelOpen.value = false
@@ -344,7 +411,7 @@ function clearModel() {
 function applyPartStyle(mesh) {
   const mat = mesh.material
   if (!mat || !mat.isMeshStandardMaterial) return
-  const isFaulty = faultyPartName.value && mesh.userData.partName === faultyPartName.value
+  const isFaulty = meshMatchesPart(mesh, faultyPartName.value)
   if (isFaulty) {
     mat.color.setHex(0xdc2626)
     mat.emissive.setHex(0xb91c1c)
@@ -517,6 +584,75 @@ function resetView() {
   if (!bbox.isEmpty()) focusToBox(bbox, 0.5)
 }
 
+let treeIdCounter = 0
+
+/**
+ * Build a nested tree of named glTF nodes from the loaded scene. Unnamed wrapper nodes
+ * are skipped and their children are bubbled up, so the tree only shows meaningful
+ * assembly / part names.
+ */
+function buildTree(root) {
+  treeIdCounter = 0
+  const walk = (obj) => {
+    const name = obj.userData && obj.userData.name ? String(obj.userData.name).trim() : ''
+    const childNodes = []
+    for (const child of obj.children || []) childNodes.push(...walk(child))
+    if (name) return [{ id: 't' + treeIdCounter++, name, partName: name, children: childNodes }]
+    return childNodes
+  }
+  const out = []
+  for (const child of root.children || []) out.push(...walk(child))
+  return out
+}
+
+function toggleNode(id) {
+  const s = new Set(expandedNodes.value)
+  if (s.has(id)) s.delete(id)
+  else s.add(id)
+  expandedNodes.value = s
+}
+
+function collectExpandableIds(nodes, acc) {
+  for (const n of nodes) {
+    if (n.children && n.children.length) {
+      acc.push(n.id)
+      collectExpandableIds(n.children, acc)
+    }
+  }
+  return acc
+}
+
+function expandAllNodes() {
+  expandedNodes.value = new Set(collectExpandableIds(modelTree.value, []))
+}
+
+function collapseAllNodes() {
+  expandedNodes.value = new Set()
+}
+
+/**
+ * Click a tree node to mark that node (assembly or leaf) as faulty -> it turns red.
+ * Clicking the already-selected node clears the selection. The camera frames the node
+ * but other parts stay visible/clickable so the user can still drill into a sub-part.
+ */
+function selectTreeNode(row) {
+  if (faultyPartName.value === row.partName) {
+    faultyPartName.value = ''
+    return
+  }
+  faultyPartName.value = row.partName
+  if (!modelGroup) return
+  const matches = []
+  modelGroup.traverse((o) => {
+    if (o.isMesh && meshMatchesPart(o, row.partName)) matches.push(o)
+  })
+  if (matches.length) {
+    const bbox = new THREE.Box3()
+    matches.forEach((m) => bbox.union(new THREE.Box3().setFromObject(m)))
+    if (!bbox.isEmpty()) focusToBox(bbox, 1.6)
+  }
+}
+
 /**
  * Derive the part name (= glTF node name) for a primitive mesh. GLTFLoader stores the
  * original glTF node name in `userData.name`; for multi-primitive meshes only the node
@@ -531,6 +667,32 @@ function pickPartName(mesh) {
   }
   const meshName = (mesh.name || '').trim()
   return meshName || 'Part'
+}
+
+/**
+ * Collect the full chain of glTF node names from `obj` up to (but excluding) `stop`:
+ * [leafName, parentAssembly, grandparentAssembly, ...].
+ */
+function nodePath(obj, stop) {
+  const path = []
+  let o = obj
+  while (o && o !== stop) {
+    const n = o.userData && o.userData.name ? String(o.userData.name).trim() : ''
+    if (n && !path.includes(n)) path.push(n)
+    o = o.parent
+  }
+  return path
+}
+
+/**
+ * True if `mesh` belongs to part/assembly `name`: matches its own leaf name OR any
+ * ancestor assembly name in `userData.partPath`. Lets a whole assembly highlight red.
+ */
+function meshMatchesPart(mesh, name) {
+  if (!name || !mesh) return false
+  if (mesh.userData.partName === name) return true
+  const path = mesh.userData.partPath
+  return Array.isArray(path) && path.includes(name)
 }
 
 /**
@@ -560,7 +722,15 @@ function renderGltf(gltf) {
 
   root.updateMatrixWorld(true)
 
+  // Build the node tree (for the model tree panel) from the original glTF hierarchy
+  // before we merge/dispose it.
+  modelTree.value = buildTree(root)
+  expandedNodes.value = new Set(
+    modelTree.value.filter((n) => n.children && n.children.length).map((n) => n.id)
+  )
+
   const partGeoms = new Map()
+  const partPaths = new Map()
   const order = []
   root.traverse((obj) => {
     if (!obj.isMesh) return
@@ -569,6 +739,7 @@ function renderGltf(gltf) {
     if (!geom) return
     if (!partGeoms.has(partName)) {
       partGeoms.set(partName, [])
+      partPaths.set(partName, nodePath(obj, root))
       order.push(partName)
     }
     partGeoms.get(partName).push(geom)
@@ -589,6 +760,7 @@ function renderGltf(gltf) {
     })
     const mesh = new THREE.Mesh(merged, material)
     mesh.userData.partName = partName
+    mesh.userData.partPath = partPaths.get(partName) || [partName]
     modelGroup.add(mesh)
     meshesCount.value += 1
   }
@@ -724,6 +896,12 @@ onBeforeUnmount(() => {
 .btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+.btn.active {
+  background: #1e40af;
+  color: white;
+  border-color: #1e40af;
 }
 
 .btn-back {
@@ -1027,5 +1205,111 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 100%;
   display: block;
+}
+
+.tree-panel {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 6;
+  width: 260px;
+  max-height: calc(100% - 24px);
+  display: flex;
+  flex-direction: column;
+  background: rgba(255, 255, 255, 0.97);
+  border: 1px solid rgba(17, 24, 39, 0.15);
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(17, 24, 39, 0.15);
+  overflow: hidden;
+}
+
+.tree-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(17, 24, 39, 0.1);
+  background: #f8fafc;
+}
+
+.tree-panel-title {
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #475569;
+}
+
+.tree-panel-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.tree-mini-btn {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: white;
+  color: #475569;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+.tree-mini-btn:hover {
+  background: #e2e8f0;
+}
+
+.tree-list {
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-right: 6px;
+  min-height: 26px;
+  font-size: 13px;
+  color: #1f2937;
+}
+.tree-row.selected {
+  background: rgba(220, 38, 38, 0.12);
+}
+.tree-row.selected .tree-name {
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+.tree-arrow {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+.tree-arrow-empty {
+  cursor: default;
+}
+
+.tree-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  padding: 3px 2px;
+  border-radius: 4px;
+}
+.tree-name:hover {
+  background: rgba(37, 99, 235, 0.1);
 }
 </style>

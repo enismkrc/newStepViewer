@@ -487,10 +487,10 @@ function loop() {
         }
       } else {
         // Named part: use the union bounding box center of matching meshes.
-        if (isIsolated.value && !(isolatedMesh && isolatedMesh.userData.partName === entry.partName)) return
+        if (isIsolated.value && !meshMatchesPart(isolatedMesh, entry.partName)) return
         const bbox = new THREE.Box3()
         modelGroup.traverse((obj) => {
-          if (obj.isMesh && obj.userData.partName === entry.partName) bbox.union(new THREE.Box3().setFromObject(obj))
+          if (obj.isMesh && meshMatchesPart(obj, entry.partName)) bbox.union(new THREE.Box3().setFromObject(obj))
         })
         if (!bbox.isEmpty()) {
           bbox.getCenter(worldPos)
@@ -565,7 +565,7 @@ function clearModel() {
 function applyPartStyle(mesh) {
   const mat = mesh.material
   if (!mat || !mat.isMeshStandardMaterial) return
-  const isFaulty = mesh.userData.isFaultMarker || (faultyPartName.value && mesh.userData.partName === faultyPartName.value)
+  const isFaulty = mesh.userData.isFaultMarker || meshMatchesPart(mesh, faultyPartName.value)
   if (isFaulty) {
     // Fault highlight color (red) is applied here.
     mat.color.setHex(0xdc2626)
@@ -652,7 +652,7 @@ function onPointerMove(event) {
   setHovered(obj)
   if (obj.userData.isFaultMarker) {
     hoveredFaultId.value = 'marker:' + obj.userData.markerIndex
-  } else if (faultyPartName.value && obj.userData.partName === faultyPartName.value) {
+  } else if (meshMatchesPart(obj, faultyPartName.value)) {
     hoveredFaultId.value = 'part:' + faultyPartName.value
   } else {
     hoveredFaultId.value = null
@@ -677,12 +677,11 @@ function onPointerDown(event) {
   if (!hits.length) return
 
   const clicked = hits[0].object
-  const clickedPartName = clicked?.userData?.partName || ''
   if (isIsolated.value && clicked === isolatedMesh) {
     showAllParts()
     return
   }
-  if (!isDetailView.value && props.detailModelUrl && props.detailFaultyPart && clickedPartName === faultyPartName.value) {
+  if (!isDetailView.value && props.detailModelUrl && props.detailFaultyPart && meshMatchesPart(clicked, faultyPartName.value)) {
     // Detail-view switch: when user clicks the faulty part, swap to the detail model.
     isDetailView.value = true
     loadModelFromUrl(props.detailModelUrl).then(() => {
@@ -736,11 +735,21 @@ function focusFault(faultId) {
     })
     return
   }
-  let target = null
+  const matches = []
   modelGroup.traverse((obj) => {
-    if (!target && obj.isMesh && obj.userData.partName === entry.partName) target = obj
+    if (obj.isMesh && meshMatchesPart(obj, entry.partName)) matches.push(obj)
   })
-  if (target) isolatePart(target)
+  if (!matches.length) return
+  if (matches.length === 1) {
+    // Single leaf part: isolate it and open the detail panel.
+    isolatePart(matches[0])
+  } else {
+    // Whole assembly: frame all of its sub-parts without isolating, so the user can
+    // still click into an individual sub-part for detail.
+    const bbox = new THREE.Box3()
+    matches.forEach((m) => bbox.union(new THREE.Box3().setFromObject(m)))
+    if (!bbox.isEmpty()) focusToBox(bbox, 1.6)
+  }
 }
 
 function showAllParts() {
@@ -902,6 +911,34 @@ function pickPartName(mesh) {
 }
 
 /**
+ * Collect the full chain of glTF node names from `obj` up to (but excluding) `stop`.
+ * The result is [leafName, parentAssembly, grandparentAssembly, ...], letting us match
+ * a fault against either a leaf part OR any ancestor assembly name.
+ */
+function nodePath(obj, stop) {
+  const path = []
+  let o = obj
+  while (o && o !== stop) {
+    const n = o.userData && o.userData.name ? String(o.userData.name).trim() : ''
+    if (n && !path.includes(n)) path.push(n)
+    o = o.parent
+  }
+  return path
+}
+
+/**
+ * True if `mesh` belongs to part/assembly `name`: matches its own leaf name OR any
+ * ancestor assembly name stored in `userData.partPath`. This is what makes selecting a
+ * whole assembly (e.g. "DC Converter Unit") highlight all of its sub-parts.
+ */
+function meshMatchesPart(mesh, name) {
+  if (!name || !mesh) return false
+  if (mesh.userData.partName === name) return true
+  const path = mesh.userData.partPath
+  return Array.isArray(path) && path.includes(name)
+}
+
+/**
  * Bake a mesh's world transform into a fresh position+normal-only geometry, so all
  * geometries of one part can be merged (mergeGeometries needs matching attributes).
  */
@@ -934,6 +971,7 @@ function renderGltf(gltf) {
   root.updateMatrixWorld(true)
 
   const partGeoms = new Map()
+  const partPaths = new Map()
   const order = []
   root.traverse((obj) => {
     if (!obj.isMesh) return
@@ -942,6 +980,7 @@ function renderGltf(gltf) {
     if (!geom) return
     if (!partGeoms.has(partName)) {
       partGeoms.set(partName, [])
+      partPaths.set(partName, nodePath(obj, root))
       order.push(partName)
     }
     partGeoms.get(partName).push(geom)
@@ -962,6 +1001,7 @@ function renderGltf(gltf) {
     })
     const mesh = new THREE.Mesh(merged, material)
     mesh.userData.partName = partName
+    mesh.userData.partPath = partPaths.get(partName) || [partName]
     modelGroup.add(mesh)
     meshesCount.value += 1
   }
