@@ -1,17 +1,17 @@
 <template>
   <div class="import-tool">
     <header class="import-header">
-      <h1 class="import-title">Model Import & Conversion</h1>
-      <p class="import-desc">Upload a STEP, IGES, BREP or JSON file. CAD files are converted to JSON for use in HMS.</p>
+      <h1 class="import-title">GLB Model Preview</h1>
+      <p class="import-desc">Upload a GLB / glTF file to preview it. GLB files are used directly by HMS — no conversion needed.</p>
     </header>
     <div class="import-content">
-      <StepUploadViewer :load-default-model-on-mount="false" />
+      <GlbUploadViewer />
     </div>
   </div>
 </template>
 
 <script setup>
-import StepUploadViewer from '../components/StepUploadViewer.vue'
+import GlbUploadViewer from '../components/GlbUploadViewer.vue'
 </script>
 
 <style scoped>

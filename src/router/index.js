@@ -17,7 +17,7 @@ const routes = [
     path: '/import',
     name: 'Import',
     component: () => import('../views/ImportTool.vue'),
-    meta: { title: 'Model Import & Conversion' }
+    meta: { title: 'GLB Preview' }
   }
 ]
 

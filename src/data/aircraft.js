@@ -1,6 +1,10 @@
 /**
  * Mock aircraft list (as if from backend).
- * All use the same test model: F35_converted.json
+ * All use the same test model: F35.gltf
+ *
+ * NOTE: `faultyPart` / `detailFaultyPart` must match a node/mesh name inside the GLB.
+ * The coordinate-based `faultMarkers` (aircraft-5) are independent of part names, but
+ * their X/Y/Z values must be expressed in the GLB's own coordinate space/units.
  */
 export const aircraftList = [
   {
@@ -10,12 +14,14 @@ export const aircraftList = [
     fleet: 'Training Fleet',
     tailNumber: 'F-35A-01',
     displayName: 'F-35A 01',
-    modelUrl: '/F35_converted.json',
+    modelUrl: '/F35.gltf',
     hasFault: true,
     faultyPart: 'Engine',
-    faultType: 'FAULT',
-    detailModelUrl: '/engine_converted.json',
-    detailFaultyPart: '4 central mounting shaft'
+    faultType: 'FAULT'
+    // Detail (engine) model not added yet. When ready, drop the file in public/ and
+    // re-enable these two lines:
+    // detailModelUrl: '/engine.glb',
+    // detailFaultyPart: '4 central mounting shaft'
   },
   {
     id: 'aircraft-2',
@@ -24,7 +30,7 @@ export const aircraftList = [
     fleet: 'Training Fleet',
     tailNumber: 'F-35A-02',
     displayName: 'F-35A 02',
-    modelUrl: '/F35_converted.json',
+    modelUrl: '/F35.gltf',
     hasFault: true,
     faultyPart: 'Front LG',
     faultType: 'SENSOR'
@@ -36,7 +42,7 @@ export const aircraftList = [
     fleet: 'Operational Fleet',
     tailNumber: 'F-35A-03',
     displayName: 'F-35A 03',
-    modelUrl: '/F35_converted.json',
+    modelUrl: '/F35.gltf',
     hasFault: false,
     faultyPart: null,
     faultType: null
@@ -48,7 +54,7 @@ export const aircraftList = [
     fleet: 'Operational Fleet',
     tailNumber: 'F-35A-04',
     displayName: 'F-35A 04',
-    modelUrl: '/F35_converted.json',
+    modelUrl: '/F35.gltf',
     hasFault: false,
     faultyPart: null,
     faultType: null
@@ -63,7 +69,7 @@ export const aircraftList = [
     fleet: 'Operational Fleet',
     tailNumber: 'F-35A-05',
     displayName: 'F-35A 05 (MFL demo)',
-    modelUrl: '/F35_converted.json',
+    modelUrl: '/F35.gltf',
     hasFault: true,
     faultyPart: null,
     faultType: null,

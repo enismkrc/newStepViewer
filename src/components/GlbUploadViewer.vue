@@ -2,8 +2,8 @@
   <div class="page">
     <header class="header">
       <div>
-        <div class="title">3D Model Viewer</div>
-        <div class="subtitle">Upload STEP/IGES/BREP or saved JSON file</div>
+        <div class="title">GLB Model Viewer</div>
+        <div class="subtitle">Upload a GLB / glTF file to preview it</div>
       </div>
 
       <div class="controls">
@@ -12,14 +12,11 @@
           <input
             class="file"
             type="file"
-            accept=".step,.stp,.iges,.igs,.brep,.json"
+            accept=".glb,.gltf"
             @change="onFileChange"
           />
         </label>
 
-        <button class="btn" :disabled="!modelLoaded" @click="downloadJson" title="Download converted model as JSON (open directly next time)">
-          Download as JSON
-        </button>
         <button class="btn" :disabled="!modelLoaded" @click="resetView">Reset view</button>
         <button class="btn" :disabled="!modelLoaded" @click="toggleWireframe">
           {{ wireframe ? 'Solid' : 'Wireframe' }}
@@ -97,16 +94,13 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import occtimportjs from 'occt-import-js'
-
-const props = defineProps({
-  loadDefaultModelOnMount: { type: Boolean, default: true }
-})
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 
 const canvasEl = ref(null)
-const statusText = ref('Loading default model...')
+const statusText = ref('Select a GLB / glTF file to load.')
 const errorText = ref('')
 const fileName = ref('')
 const wireframe = ref(false)
@@ -118,7 +112,6 @@ const isolatedPartName = ref('')
 const partDetailPanelOpen = ref(false)
 const partNames = ref([])
 const faultyPartName = ref('')
-const lastImportResult = ref(null)
 const stageRef = ref(null)
 const faultLabelScreen = ref({ x: 0, y: 0, visible: false })
 const transparentOthers = ref(false)
@@ -217,6 +210,7 @@ let raycaster = null
 let pointer = null
 let hoveredMesh = null
 let isolatedMesh = null
+const gltfLoader = new GLTFLoader()
 
 function initThree() {
   const canvas = canvasEl.value
@@ -252,6 +246,9 @@ function initThree() {
   controls.maxDistance = 100000
 
   modelGroup = new THREE.Group()
+  // FreeCAD glTF exports are Z-up with "up" = -Z. Rotate +90° about X so the model
+  // sits upright in Three.js (Y-up).
+  modelGroup.rotation.x = Math.PI / 2
   scene.add(modelGroup)
 
   raycaster = new THREE.Raycaster()
@@ -317,11 +314,20 @@ function onResize() {
   camera.updateProjectionMatrix()
 }
 
+function disposeObject(obj) {
+  obj.traverse((c) => {
+    if (c.geometry) c.geometry.dispose()
+    if (c.material) {
+      if (Array.isArray(c.material)) c.material.forEach((m) => m.dispose())
+      else c.material.dispose()
+    }
+  })
+}
+
 function clearModel() {
   meshesCount.value = 0
   partNames.value = []
   faultyPartName.value = ''
-  lastImportResult.value = null
   isIsolated.value = false
   isolatedPartName.value = ''
   partDetailPanelOpen.value = false
@@ -331,11 +337,7 @@ function clearModel() {
   while (modelGroup.children.length) {
     const obj = modelGroup.children[0]
     modelGroup.remove(obj)
-    if (obj.geometry) obj.geometry.dispose()
-    if (obj.material) {
-      if (Array.isArray(obj.material)) obj.material.forEach((m) => m.dispose())
-      else obj.material.dispose()
-    }
+    disposeObject(obj)
   }
 }
 
@@ -462,7 +464,7 @@ function isolatePart(mesh) {
   partDetailPanelOpen.value = true
   isIsolated.value = true
   const bbox = new THREE.Box3().setFromObject(mesh)
-  if (!bbox.isEmpty()) focusToBox(bbox, 4.2)
+  if (!bbox.isEmpty()) focusToBox(bbox, 1.2)
 }
 
 function showAllParts() {
@@ -515,6 +517,102 @@ function resetView() {
   if (!bbox.isEmpty()) focusToBox(bbox, 0.5)
 }
 
+/**
+ * Derive the part name (= glTF node name) for a primitive mesh. GLTFLoader stores the
+ * original glTF node name in `userData.name`; for multi-primitive meshes only the node
+ * (Group) carries it, so we return the nearest ancestor (incl. self) that has one.
+ */
+function pickPartName(mesh) {
+  let o = mesh
+  while (o && o !== modelGroup) {
+    const n = o.userData && o.userData.name ? String(o.userData.name).trim() : ''
+    if (n) return n
+    o = o.parent
+  }
+  const meshName = (mesh.name || '').trim()
+  return meshName || 'Part'
+}
+
+/**
+ * Bake a mesh's world transform into a fresh position+normal-only geometry, so all
+ * geometries of one part can be merged (mergeGeometries needs matching attributes).
+ */
+function bakeGeometry(mesh) {
+  const src = mesh.geometry
+  if (!src) return null
+  const g = src.index ? src.toNonIndexed() : src.clone()
+  g.applyMatrix4(mesh.matrixWorld)
+  const out = new THREE.BufferGeometry()
+  out.setAttribute('position', g.getAttribute('position'))
+  if (g.getAttribute('normal')) out.setAttribute('normal', g.getAttribute('normal'))
+  else out.computeVertexNormals()
+  if (g !== src) g.dispose()
+  return out
+}
+
+/**
+ * Render a loaded glTF/GLB into the scene, merging all primitives that belong to the
+ * same node into ONE mesh per part (so isolation / highlight work on whole parts).
+ */
+function renderGltf(gltf) {
+  const root = gltf.scene || (Array.isArray(gltf.scenes) ? gltf.scenes[0] : null)
+  if (!root) throw new Error('glTF does not contain a scene.')
+
+  root.updateMatrixWorld(true)
+
+  const partGeoms = new Map()
+  const order = []
+  root.traverse((obj) => {
+    if (!obj.isMesh) return
+    const partName = pickPartName(obj)
+    const geom = bakeGeometry(obj)
+    if (!geom) return
+    if (!partGeoms.has(partName)) {
+      partGeoms.set(partName, [])
+      order.push(partName)
+    }
+    partGeoms.get(partName).push(geom)
+  })
+
+  for (const partName of order) {
+    const geoms = partGeoms.get(partName)
+    const merged = geoms.length === 1 ? geoms[0] : mergeGeometries(geoms, false)
+    if (!merged) continue
+    geoms.forEach((g) => { if (g !== merged) g.dispose() })
+
+    const material = new THREE.MeshStandardMaterial({
+      color: new THREE.Color(0xd6d9e6),
+      roughness: 0.55,
+      metalness: 0.15,
+      side: THREE.DoubleSide,
+      wireframe: wireframe.value
+    })
+    const mesh = new THREE.Mesh(merged, material)
+    mesh.userData.partName = partName
+    modelGroup.add(mesh)
+    meshesCount.value += 1
+  }
+
+  root.traverse((obj) => {
+    if (obj.isMesh) {
+      obj.geometry?.dispose()
+      if (obj.material) {
+        if (Array.isArray(obj.material)) obj.material.forEach((m) => m.dispose())
+        else obj.material.dispose()
+      }
+    }
+  })
+
+  partNames.value = order.slice().sort((a, b) => a.localeCompare(b))
+  if (partNames.value.includes('Engine')) faultyPartName.value = 'Engine'
+  if (faultyPartName.value) transparentOthers.value = true
+  updateFaultyHighlight()
+
+  modelGroup.updateMatrixWorld(true)
+  const fitBox = new THREE.Box3().setFromObject(modelGroup)
+  if (!fitBox.isEmpty()) focusToBox(fitBox, 0.5)
+}
+
 async function onFileChange(event) {
   const file = event.target.files?.[0]
   if (!file) return
@@ -526,48 +624,15 @@ async function onFileChange(event) {
 
   try {
     const name = file.name.toLowerCase()
-
-    if (name.endsWith('.json')) {
-      const text = await file.text()
-      const data = JSON.parse(text)
-      if (!data || !Array.isArray(data.meshes)) throw new Error('Invalid JSON: meshes array not found.')
-      if (data.success === undefined) data.success = true
-      lastImportResult.value = data
-      renderImported(data)
-      setWireframe(wireframe.value)
-      statusText.value = `Loaded (JSON). Mesh count: ${meshesCount.value}`
-      event.target.value = ''
-      return
+    if (!name.endsWith('.glb') && !name.endsWith('.gltf')) {
+      throw new Error('Unsupported file type. (.glb, .gltf)')
     }
 
-    statusText.value = 'Importing (STEP/IGES/BREP)...'
     const buffer = await file.arrayBuffer()
-    const bytes = new Uint8Array(buffer)
-
-    const occt = await occtimportjs({
-      locateFile: (path, prefix) => (path.endsWith('.wasm') ? `/${path}` : prefix + path)
-    })
-
-    let importFn = null
-    if (name.endsWith('.step') || name.endsWith('.stp')) importFn = occt.ReadStepFile
-    else if (name.endsWith('.iges') || name.endsWith('.igs')) importFn = occt.ReadIgesFile
-    else if (name.endsWith('.brep')) importFn = occt.ReadBrepFile
-    else throw new Error('Unsupported file type. (.step, .stp, .iges, .igs, .brep, .json)')
-
-    const params = {
-      linearUnit: 'millimeter',
-      linearDeflectionType: 'bounding_box_ratio',
-      linearDeflection: 0.08,
-      angularDeflection: 0.35
-    }
-
-    const result = importFn(bytes, params)
-    if (!result?.success) throw new Error(result?.error || 'Import failed.')
-
-    lastImportResult.value = result
-    renderImported(result)
+    const gltf = await gltfLoader.parseAsync(buffer, '')
+    renderGltf(gltf)
     setWireframe(wireframe.value)
-    statusText.value = `Loaded. Mesh count: ${meshesCount.value} — You can save via "Download as JSON" and open directly next time.`
+    statusText.value = `Loaded. Mesh count: ${meshesCount.value}`
   } catch (e) {
     console.error(e)
     errorText.value = e?.message || String(e)
@@ -577,113 +642,8 @@ async function onFileChange(event) {
   }
 }
 
-function downloadJson() {
-  const data = lastImportResult.value
-  if (!data || !data.meshes) return
-  const json = JSON.stringify(data, null, 2)
-  const base = (fileName.value || 'model').replace(/\.[^/.]+$/, '')
-  const name = `${base}_converted.json`
-  const blob = new Blob([json], { type: 'application/json' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = name
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  URL.revokeObjectURL(url)
-}
-
-function renderImported(importResult) {
-  if (!importResult?.meshes?.length) return
-  const bbox = new THREE.Box3()
-  let first = true
-  const nameSet = new Set()
-  let meshIndex = 0
-
-  for (const meshData of importResult.meshes) {
-    if (!meshData?.attributes?.position?.array || !meshData?.index?.array) {
-      meshIndex++
-      continue
-    }
-
-    const geometry = new THREE.BufferGeometry()
-    const positions = new Float32Array(meshData.attributes.position.array)
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
-
-    if (meshData.attributes.normal?.array) {
-      const normals = new Float32Array(meshData.attributes.normal.array)
-      geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3))
-    } else {
-      geometry.computeVertexNormals()
-    }
-
-    const indices = new (positions.length / 3 > 65535 ? Uint32Array : Uint16Array)(meshData.index.array)
-    geometry.setIndex(new THREE.BufferAttribute(indices, 1))
-
-    const partName = (meshData.name && String(meshData.name).trim()) || `Part #${meshIndex + 1}`
-    nameSet.add(partName)
-
-    const material = new THREE.MeshStandardMaterial({
-      color: meshData.color && meshData.color.length === 3 ? new THREE.Color(...meshData.color) : new THREE.Color(0xd6d9e6),
-      roughness: 0.55,
-      metalness: 0.15,
-      side: THREE.DoubleSide,
-      wireframe: wireframe.value
-    })
-
-    const mesh = new THREE.Mesh(geometry, material)
-    mesh.userData.partName = partName
-    modelGroup.add(mesh)
-    meshesCount.value += 1
-
-    if (first) {
-      bbox.setFromObject(mesh)
-      first = false
-    } else {
-      bbox.union(new THREE.Box3().setFromObject(mesh))
-    }
-    meshIndex++
-  }
-
-  partNames.value = Array.from(nameSet).sort((a, b) => a.localeCompare(b))
-  if (partNames.value.includes('Engine')) faultyPartName.value = 'Engine'
-  if (faultyPartName.value) transparentOthers.value = true
-  updateFaultyHighlight()
-  if (!bbox.isEmpty()) focusToBox(bbox, 0.5)
-}
-
-async function loadDefaultModel() {
-  const defaultUrl = '/F35_converted.json'
-  fileName.value = 'F35_converted.json'
-  errorText.value = ''
-  statusText.value = 'Loading default model...'
-  clearModel()
-  try {
-    const res = await fetch(defaultUrl)
-    if (!res.ok) throw new Error(`File not found: ${res.status}`)
-    const text = await res.text()
-    const data = JSON.parse(text)
-    if (!data || !Array.isArray(data.meshes)) throw new Error('Invalid JSON: meshes array not found.')
-    if (data.success === undefined) data.success = true
-    lastImportResult.value = data
-    renderImported(data)
-    setWireframe(wireframe.value)
-    statusText.value = `Loaded (JSON). Mesh count: ${meshesCount.value}`
-  } catch (e) {
-    console.error(e)
-    errorText.value = e?.message || String(e)
-    statusText.value = 'Select and load a file or the default model failed to load.'
-  }
-}
-
 onMounted(() => {
   initThree()
-  if (props.loadDefaultModelOnMount) {
-    loadDefaultModel()
-  } else {
-    statusText.value = 'Select and load a file.'
-  }
 })
 
 onBeforeUnmount(() => {
@@ -1069,4 +1029,3 @@ onBeforeUnmount(() => {
   display: block;
 }
 </style>
-

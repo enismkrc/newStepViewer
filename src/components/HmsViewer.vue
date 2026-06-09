@@ -121,19 +121,21 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 
 /**
  * HMS (Health Management System) viewer (Three.js)
  *
  * Main responsibilities:
- * - Load a JSON mesh bundle from `modelUrl` (exported by the OCCT import tool).
+ * - Load a GLB/glTF model from `modelUrl` (binary glTF, loaded natively by Three.js).
  * - Highlight the "faulty" part in red. The faulty part name comes from `props.faultyPart`,
  *   which is set by the selected aircraft record (see `src/data/aircraft.js`).
  * - Allow interaction: hover highlight, click to isolate a part and zoom camera to it.
  * - Optional: if `detailModelUrl` is provided, clicking the faulty part can switch to a deeper/detail model.
  */
 const props = defineProps({
-  modelUrl: { type: String, default: '/F35_converted.json' },
+  modelUrl: { type: String, default: '/F35.gltf' },
   /**
    * Name of the part that should be treated as "faulty" and highlighted in red.
    * This is passed from the parent page (selected aircraft).
@@ -184,7 +186,6 @@ const isolatedMarkerData = ref(null)
 const partDetailPanelOpen = ref(false)
 const partNames = ref([])
 const faultyPartName = ref(props.faultyPart ?? '')
-const lastImportResult = ref(null)
 const stageRef = ref(null)
 const transparentOthers = ref(false)
 const isDetailView = ref(false)
@@ -404,6 +405,7 @@ let pointer = null
 let hoveredMesh = null
 let isolatedMesh = null
 let faultMarkerMeshes = []
+const gltfLoader = new GLTFLoader()
 
 function initThree() {
   const canvas = canvasEl.value
@@ -439,6 +441,11 @@ function initThree() {
   controls.maxDistance = 100000
 
   modelGroup = new THREE.Group()
+  // This FreeCAD glTF export is Z-up and its "up" is -Z. Make the aircraft sit upright
+  // (+90° about world X) and yaw it -45° about world Y so the nose points toward the
+  // lower-left of the initial view.
+  modelGroup.rotateOnWorldAxis(new THREE.Vector3(1, 0, 0), Math.PI / 2)
+  modelGroup.rotateOnWorldAxis(new THREE.Vector3(0, 1, 0), -Math.PI / 4)
   scene.add(modelGroup)
 
   raycaster = new THREE.Raycaster()
@@ -523,11 +530,21 @@ function onResize() {
   camera.updateProjectionMatrix()
 }
 
+function disposeObject(obj) {
+  // GLB models are nested hierarchies, so we dispose recursively.
+  obj.traverse((c) => {
+    if (c.geometry) c.geometry.dispose()
+    if (c.material) {
+      if (Array.isArray(c.material)) c.material.forEach((m) => m.dispose())
+      else c.material.dispose()
+    }
+  })
+}
+
 function clearModel() {
   meshesCount.value = 0
   partNames.value = []
   faultyPartName.value = props.faultyPart ?? ''
-  lastImportResult.value = null
   isIsolated.value = false
   isolatedPartName.value = ''
   partDetailPanelOpen.value = false
@@ -541,11 +558,7 @@ function clearModel() {
   while (modelGroup.children.length) {
     const obj = modelGroup.children[0]
     modelGroup.remove(obj)
-    if (obj.geometry) obj.geometry.dispose()
-    if (obj.material) {
-      if (Array.isArray(obj.material)) obj.material.forEach((m) => m.dispose())
-      else obj.material.dispose()
-    }
+    disposeObject(obj)
   }
 }
 
@@ -868,59 +881,103 @@ function addFaultMarkers() {
   })
 }
 
-function renderImported(importResult) {
-  if (!importResult?.meshes?.length) return
-  const bbox = new THREE.Box3()
-  let first = true
-  const nameSet = new Set()
-  let meshIndex = 0
+/**
+ * Derive the part name (= glTF node name) for a primitive mesh.
+ *
+ * GLTFLoader stores the ORIGINAL (un-deduplicated) glTF node name in
+ * `object.userData.name`. A multi-primitive mesh becomes a named Group (the node)
+ * with that userData.name; its primitive children have no userData.name. So we walk
+ * up from the mesh and return the nearest ancestor (incl. self) that carries a
+ * `userData.name`, which is exactly the leaf node name (e.g. "Engine", "Front LG").
+ */
+function pickPartName(mesh) {
+  let o = mesh
+  while (o && o !== modelGroup) {
+    const n = o.userData && o.userData.name ? String(o.userData.name).trim() : ''
+    if (n) return n
+    o = o.parent
+  }
+  const meshName = (mesh.name || '').trim()
+  return meshName || 'Part'
+}
 
-  for (const meshData of importResult.meshes) {
-    if (!meshData?.attributes?.position?.array || !meshData?.index?.array) {
-      meshIndex++
-      continue
+/**
+ * Bake a mesh's world transform into a fresh position+normal-only geometry, so all
+ * geometries of one part can be merged (mergeGeometries needs matching attributes).
+ */
+function bakeGeometry(mesh) {
+  const src = mesh.geometry
+  if (!src) return null
+  const g = src.index ? src.toNonIndexed() : src.clone()
+  g.applyMatrix4(mesh.matrixWorld)
+  const out = new THREE.BufferGeometry()
+  out.setAttribute('position', g.getAttribute('position'))
+  if (g.getAttribute('normal')) out.setAttribute('normal', g.getAttribute('normal'))
+  else out.computeVertexNormals()
+  if (g !== src) g.dispose()
+  return out
+}
+
+/**
+ * Render a loaded glTF/GLB into the scene.
+ *
+ * glTF/STEP exports often split a single part into many primitive meshes. We merge
+ * all primitives that belong to the same node into ONE mesh per part, so the HMS
+ * logic (fault highlight by part name, isolation, bounding-box fit) works on whole
+ * parts instead of individual triangle chunks. Materials are replaced with a fresh
+ * MeshStandardMaterial so per-mesh highlight/hover/transparency is safe.
+ */
+function renderGltf(gltf) {
+  const root = gltf.scene || (Array.isArray(gltf.scenes) ? gltf.scenes[0] : null)
+  if (!root) throw new Error('glTF does not contain a scene.')
+
+  root.updateMatrixWorld(true)
+
+  const partGeoms = new Map()
+  const order = []
+  root.traverse((obj) => {
+    if (!obj.isMesh) return
+    const partName = pickPartName(obj)
+    const geom = bakeGeometry(obj)
+    if (!geom) return
+    if (!partGeoms.has(partName)) {
+      partGeoms.set(partName, [])
+      order.push(partName)
     }
+    partGeoms.get(partName).push(geom)
+  })
 
-    const geometry = new THREE.BufferGeometry()
-    const positions = new Float32Array(meshData.attributes.position.array)
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
-
-    if (meshData.attributes.normal?.array) {
-      const normals = new Float32Array(meshData.attributes.normal.array)
-      geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3))
-    } else {
-      geometry.computeVertexNormals()
-    }
-
-    const indices = new (positions.length / 3 > 65535 ? Uint32Array : Uint16Array)(meshData.index.array)
-    geometry.setIndex(new THREE.BufferAttribute(indices, 1))
-
-    const partName = (meshData.name && String(meshData.name).trim()) || `Parça #${meshIndex + 1}`
-    nameSet.add(partName)
+  for (const partName of order) {
+    const geoms = partGeoms.get(partName)
+    const merged = geoms.length === 1 ? geoms[0] : mergeGeometries(geoms, false)
+    if (!merged) continue
+    geoms.forEach((g) => { if (g !== merged) g.dispose() })
 
     const material = new THREE.MeshStandardMaterial({
-      color: meshData.color && meshData.color.length === 3 ? new THREE.Color(...meshData.color) : new THREE.Color(0xd6d9e6),
+      color: new THREE.Color(0xd6d9e6),
       roughness: 0.55,
       metalness: 0.15,
       side: THREE.DoubleSide,
       wireframe: wireframe.value
     })
-
-    const mesh = new THREE.Mesh(geometry, material)
+    const mesh = new THREE.Mesh(merged, material)
     mesh.userData.partName = partName
     modelGroup.add(mesh)
     meshesCount.value += 1
-
-    if (first) {
-      bbox.setFromObject(mesh)
-      first = false
-    } else {
-      bbox.union(new THREE.Box3().setFromObject(mesh))
-    }
-    meshIndex++
   }
 
-  partNames.value = Array.from(nameSet).sort((a, b) => a.localeCompare(b))
+  // Free the original (now-unused) glTF scene resources.
+  root.traverse((obj) => {
+    if (obj.isMesh) {
+      obj.geometry?.dispose()
+      if (obj.material) {
+        if (Array.isArray(obj.material)) obj.material.forEach((m) => m.dispose())
+        else obj.material.dispose()
+      }
+    }
+  })
+
+  partNames.value = order.slice().sort((a, b) => a.localeCompare(b))
 
   if (Array.isArray(props.faultMarkers) && props.faultMarkers.length > 0) {
     // Coordinate-based faults: place a red cube at each marker location.
@@ -932,7 +989,10 @@ function renderImported(importResult) {
     if (props.faultyPart) transparentOthers.value = true
   }
   updateFaultyHighlight()
-  if (!bbox.isEmpty()) focusToBox(bbox, 0.5)
+
+  modelGroup.updateMatrixWorld(true)
+  const fitBox = new THREE.Box3().setFromObject(modelGroup)
+  if (!fitBox.isEmpty()) focusToBox(fitBox, 0.5)
 }
 
 async function loadModelFromUrl(url) {
@@ -941,14 +1001,8 @@ async function loadModelFromUrl(url) {
   statusText.value = 'Loading model...'
   clearModel()
   try {
-    const res = await fetch(url)
-    if (!res.ok) throw new Error(`File not found: ${res.status}`)
-    const text = await res.text()
-    const data = JSON.parse(text)
-    if (!data || !Array.isArray(data.meshes)) throw new Error('Invalid JSON: meshes array not found.')
-    if (data.success === undefined) data.success = true
-    lastImportResult.value = data
-    renderImported(data)
+    const gltf = await gltfLoader.loadAsync(url)
+    renderGltf(gltf)
     setWireframe(wireframe.value)
     statusText.value = `Loaded. Mesh count: ${meshesCount.value}`
   } catch (e) {
