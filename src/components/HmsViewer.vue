@@ -135,7 +135,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
  * - Optional: if `detailModelUrl` is provided, clicking the faulty part can switch to a deeper/detail model.
  */
 const props = defineProps({
-  modelUrl: { type: String, default: '/F35.gltf' },
+  modelUrl: { type: String, default: '/aircraft.gltf' },
   /**
    * Name of the part that should be treated as "faulty" and highlighted in red.
    * This is passed from the parent page (selected aircraft).

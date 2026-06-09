@@ -1,6 +1,6 @@
 /**
  * Mock aircraft list (as if from backend).
- * All use the same test model: F35.gltf
+ * All use the same test model: aircraft.gltf
  *
  * NOTE: `faultyPart` / `detailFaultyPart` must match a node/mesh name inside the GLB.
  * The coordinate-based `faultMarkers` (aircraft-5) are independent of part names, but
@@ -14,7 +14,7 @@ export const aircraftList = [
     fleet: 'Training Fleet',
     tailNumber: 'F-35A-01',
     displayName: 'F-35A 01',
-    modelUrl: '/F35.gltf',
+    modelUrl: '/aircraft.gltf',
     hasFault: true,
     faultyPart: 'Engine',
     faultType: 'FAULT'
@@ -30,7 +30,7 @@ export const aircraftList = [
     fleet: 'Training Fleet',
     tailNumber: 'F-35A-02',
     displayName: 'F-35A 02',
-    modelUrl: '/F35.gltf',
+    modelUrl: '/aircraft.gltf',
     hasFault: true,
     faultyPart: 'Front LG',
     faultType: 'SENSOR'
@@ -42,7 +42,7 @@ export const aircraftList = [
     fleet: 'Operational Fleet',
     tailNumber: 'F-35A-03',
     displayName: 'F-35A 03',
-    modelUrl: '/F35.gltf',
+    modelUrl: '/aircraft.gltf',
     hasFault: false,
     faultyPart: null,
     faultType: null
@@ -54,7 +54,7 @@ export const aircraftList = [
     fleet: 'Operational Fleet',
     tailNumber: 'F-35A-04',
     displayName: 'F-35A 04',
-    modelUrl: '/F35.gltf',
+    modelUrl: '/aircraft.gltf',
     hasFault: false,
     faultyPart: null,
     faultType: null
@@ -69,7 +69,7 @@ export const aircraftList = [
     fleet: 'Operational Fleet',
     tailNumber: 'F-35A-05',
     displayName: 'F-35A 05 (MFL demo)',
-    modelUrl: '/F35.gltf',
+    modelUrl: '/aircraft.gltf',
     hasFault: true,
     faultyPart: null,
     faultType: null,

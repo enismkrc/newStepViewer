@@ -98,7 +98,7 @@ switched to loading GLB models directly via Three.js `GLTFLoader`.
 ## 5) Model Contract (GLB)
 
 `HmsViewer` loads a binary glTF (`.glb`) via Three.js `GLTFLoader`:
-- `modelUrl` points to a `.glb` file served from `public/` (e.g. `/F35.glb`).
+- `modelUrl` points to a `.glb`/`.gltf` file served from `public/` (e.g. `/aircraft.gltf`).
 - Each mesh's **part name** is derived from the glTF node name (`mesh.name`, falling
   back up the parent hierarchy). This name is what `faultyPart` must match.
 - On load, every mesh material is replaced with a fresh `MeshStandardMaterial` so the
