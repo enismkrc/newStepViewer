@@ -1,7 +1,10 @@
 <template>
   <div class="hms-viewer-page">
-    <div v-if="!aircraft" class="viewer-error">
-      <p>Aircraft not found.</p>
+    <div v-if="loading" class="viewer-loading">
+      <p>Loading aircraft…</p>
+    </div>
+    <div v-else-if="!aircraft" class="viewer-error">
+      <p>{{ loadError || 'Aircraft not found.' }}</p>
       <router-link to="/" class="back-link">← Back to selection</router-link>
     </div>
     <template v-else>
@@ -15,9 +18,9 @@
           :model-url="aircraft.modelUrl"
           :faulty-part="aircraft.faultyPart"
           :fault-type="aircraft.faultType"
+          :faults="aircraft.faults"
           :detail-model-url="aircraft.detailModelUrl"
           :detail-faulty-part="aircraft.detailFaultyPart"
-          :fault-markers="aircraft.faultMarkers"
         />
       </div>
     </template>
@@ -25,19 +28,34 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { aircraftList } from '../data/aircraft'
+import { getAircraftById } from '../api/aircraft'
 import HmsViewer from '../components/HmsViewer.vue'
 
 const route = useRoute()
 
-const aircraft = computed(() => {
-  // The viewer page is routed as `/view/:aircraftId`.
-  // Here we map that route param back into an aircraft record.
-  const id = route.params.aircraftId
-  return aircraftList.find((ac) => ac.id === id) ?? null
-})
+// The viewer page is routed as `/view/:aircraftId`. We load that single aircraft from
+// the API service (mock JSON now, real backend later).
+const aircraft = ref(null)
+const loading = ref(true)
+const loadError = ref('')
+
+async function loadAircraft(id) {
+  loading.value = true
+  loadError.value = ''
+  try {
+    aircraft.value = await getAircraftById(id)
+  } catch (err) {
+    console.error('Failed to load aircraft:', err)
+    loadError.value = 'Uçak bilgisi yüklenemedi.'
+    aircraft.value = null
+  } finally {
+    loading.value = false
+  }
+}
+
+watch(() => route.params.aircraftId, (id) => loadAircraft(id), { immediate: true })
 </script>
 
 <style scoped>
@@ -79,6 +97,16 @@ const aircraft = computed(() => {
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+.viewer-loading {
+  padding: 32px;
+  text-align: center;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  color: #1e40af;
+  font-weight: 700;
 }
 
 .viewer-error {

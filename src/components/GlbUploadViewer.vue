@@ -218,7 +218,7 @@ const partDetailData = computed(() => {
   if (isEngine) {
     return {
       partName: part,
-      parentAssembly: 'F35 Lightning II — Propulsion Module (F135-PW-100)',
+      parentAssembly: 'KF-21 Boramae — Propulsion Module (F414-GE-400)',
       replacementRequirement: 'On-condition; replace if TET/vibration limits exceeded or FOD confirmed',
       stockStatus: 'In stock (2 units) — P/N 28471-001',
       ataChapter: 'ATA 72 — Engine',
@@ -231,7 +231,7 @@ const partDetailData = computed(() => {
     const isFrontLG = /front\s*lg|nose\s*gear/i.test(part)
     return {
       partName: part === 'Front LG' ? 'Front LG (Front Landing Gear)' : part,
-      parentAssembly: isFrontLG ? 'F35 Lightning II — Nose Landing Gear Assembly (ATA 32-21)' : 'F35 Lightning II — Landing Gear Assembly',
+      parentAssembly: isFrontLG ? 'KF-21 Boramae — Nose Landing Gear Assembly (ATA 32-21)' : 'KF-21 Boramae — Landing Gear Assembly',
       replacementRequirement: isFrontLG
         ? 'Sensor fault: replace or calibrate per AMM 32-21-00. Main gear scheduled per MSG-3.'
         : 'Scheduled overhaul per MSG-3; replace at wear limit',
@@ -244,7 +244,7 @@ const partDetailData = computed(() => {
   }
   return {
     partName: part,
-    parentAssembly: 'F35 Lightning II — F35v2',
+    parentAssembly: 'KF-21 Boramae',
     replacementRequirement: 'On-condition or scheduled per AMM and CMM',
     stockStatus: 'Supply on request',
     ataChapter: '—',
@@ -311,9 +311,8 @@ function initThree() {
   controls.maxDistance = 100000
 
   modelGroup = new THREE.Group()
-  // FreeCAD glTF exports are Z-up with "up" = -Z. Rotate +90° about X so the model
-  // sits upright in Three.js (Y-up).
-  modelGroup.rotation.x = Math.PI / 2
+  // Generic preview: respect the file's own orientation (glTF standard is Y-up, which is
+  // what our KF-21 export uses). Z-up exports would appear on their side here.
   scene.add(modelGroup)
 
   raycaster = new THREE.Raycaster()

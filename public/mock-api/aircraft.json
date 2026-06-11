@@ -1,0 +1,68 @@
+[
+  {
+    "id": "aircraft-1",
+    "country": "South Korea",
+    "city": "Sacheon (KAI)",
+    "fleet": "Test Fleet",
+    "tailNumber": "KF-21-01",
+    "displayName": "KF-21 Boramae 01",
+    "modelUrl": "/KF-21.gltf",
+    "hasFault": true,
+    "faults": [
+      { "part": "Left engine", "type": "FAULT", "fin": "28471", "status": "FAULT", "warningFaults": "High TET (Turbine Exit Temp) and N2 vibration exceedance. Inspect for FOD / blade damage per AMM 72-00-00." },
+      { "part": "Landing gear", "type": "FAULT", "fin": "32101", "status": "FAULT", "warningFaults": "WOW / position sensor out of tolerance. Calibrate per AMM 32-21-00 or replace sensor P/N 32101-002." },
+      { "part": "R_Rudder", "type": "FAULT", "fin": "27410", "status": "FAULT", "warningFaults": "Rudder actuator feedback drift detected. Inspect actuator and harness per AMM 27-20-00." },
+      { "part": "L_Flaperon", "type": "FAULT", "fin": "27155", "status": "FAULT", "warningFaults": "Flaperon actuator position feedback out of range. Possible hydraulic/electrical fault. Inspect per AMM 27-10-00." },
+      { "part": "Cockpit", "type": "WARNING", "fin": "31220", "status": "WARNING", "warningFaults": "Cockpit display BIT intermittent. Check avionics connectors and power per AMM 31-00-00." },
+      { "part": "IRIS-T003", "type": "FAULT", "fin": "94110", "status": "FAULT", "warningFaults": "Missile station no response on self-test. Check pylon/store interface per AMM 94-00-00." }
+    ]
+  },
+  {
+    "id": "aircraft-2",
+    "country": "South Korea",
+    "city": "Sacheon (KAI)",
+    "fleet": "Test Fleet",
+    "tailNumber": "KF-21-02",
+    "displayName": "KF-21 Boramae 02",
+    "modelUrl": "/KF-21.gltf",
+    "hasFault": true,
+    "faults": [
+      { "part": "Nose Landing gear", "type": "FAULT", "fin": "32101", "status": "FAULT", "warningFaults": "Nose gear WOW / position sensor out of tolerance. Calibrate per AMM 32-21-00 or replace sensor P/N 32101-002." }
+    ]
+  },
+  {
+    "id": "aircraft-3",
+    "country": "South Korea",
+    "city": "Seosan AFB",
+    "fleet": "Operational Fleet",
+    "tailNumber": "KF-21-03",
+    "displayName": "KF-21 Boramae 03",
+    "modelUrl": "/KF-21.gltf",
+    "hasFault": false,
+    "faults": []
+  },
+  {
+    "id": "aircraft-4",
+    "country": "Indonesia",
+    "city": "Madiun AFB",
+    "fleet": "Operational Fleet",
+    "tailNumber": "IF-21-01",
+    "displayName": "KF-21 (IF-X) 01",
+    "modelUrl": "/KF-21.gltf",
+    "hasFault": false,
+    "faults": []
+  },
+  {
+    "id": "aircraft-5",
+    "country": "South Korea",
+    "city": "Seosan AFB",
+    "fleet": "Operational Fleet",
+    "tailNumber": "KF-21-05",
+    "displayName": "KF-21 Boramae 05",
+    "modelUrl": "/KF-21.gltf",
+    "hasFault": true,
+    "faults": [
+      { "part": "Right engine", "type": "FAULT", "fin": "28472", "status": "FAULT", "warningFaults": "Right engine high TET and N2 vibration exceedance. Inspect for FOD / blade damage per AMM 72-00-00." }
+    ]
+  }
+]

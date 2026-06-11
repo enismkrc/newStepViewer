@@ -14,6 +14,9 @@
         <button v-if="canReset" type="button" class="reset-btn" @click="resetAll">Reset</button>
       </div>
 
+      <div v-if="loading" class="data-status">Loading aircraft…</div>
+      <div v-else-if="loadError" class="data-status data-status-error">{{ loadError }}</div>
+
       <div class="steps">
         <div class="step">
           <label class="step-label" for="countrySelect">Country</label>
@@ -85,8 +88,8 @@
 
 <script setup>
 import { useRouter } from 'vue-router'
-import { computed, ref } from 'vue'
-import { aircraftList } from '../data/aircraft'
+import { computed, ref, onMounted } from 'vue'
+import { getAircraftList } from '../api/aircraft'
 
 const router = useRouter()
 
@@ -94,10 +97,24 @@ const router = useRouter()
  * Hierarchical selection is derived from the aircraft list:
  * Country -> City -> Fleet -> Aircraft
  *
- * Today this is fed by mock data (`src/data/aircraft.js`).
- * Later, to switch to a backend, replace the `aircraftList` import with an API call that
- * fills a reactive array, and keep the computed selectors below unchanged.
+ * The list is loaded from the API service (mock JSON now, real backend later). The
+ * computed selectors below stay the same regardless of the data source.
  */
+const aircraftList = ref([])
+const loading = ref(true)
+const loadError = ref('')
+
+onMounted(async () => {
+  try {
+    aircraftList.value = await getAircraftList()
+  } catch (err) {
+    console.error('Failed to load aircraft list:', err)
+    loadError.value = 'Uçak listesi yüklenemedi.'
+  } finally {
+    loading.value = false
+  }
+})
+
 const selectedCountry = ref('')
 const selectedCity = ref('')
 const selectedFleet = ref('')
@@ -109,14 +126,14 @@ function goToView(aircraftId) {
 
 const countries = computed(() => {
   const set = new Set()
-  for (const ac of aircraftList) set.add(ac.country || 'Unknown')
+  for (const ac of aircraftList.value) set.add(ac.country || 'Unknown')
   return Array.from(set).sort((a, b) => a.localeCompare(b))
 })
 
 const cities = computed(() => {
   if (!selectedCountry.value) return []
   const set = new Set()
-  for (const ac of aircraftList) {
+  for (const ac of aircraftList.value) {
     const country = ac.country || 'Unknown'
     if (country !== selectedCountry.value) continue
     set.add(ac.city || 'Unknown')
@@ -127,7 +144,7 @@ const cities = computed(() => {
 const fleets = computed(() => {
   if (!selectedCountry.value || !selectedCity.value) return []
   const set = new Set()
-  for (const ac of aircraftList) {
+  for (const ac of aircraftList.value) {
     const country = ac.country || 'Unknown'
     const city = ac.city || 'Unknown'
     if (country !== selectedCountry.value) continue
@@ -140,7 +157,7 @@ const fleets = computed(() => {
 const filteredAircraftSorted = computed(() => {
   if (!selectedCountry.value || !selectedCity.value || !selectedFleet.value) return []
   // Tail Number list is shown only after Fleet is selected.
-  return aircraftList
+  return aircraftList.value
     .filter((ac) => (ac.country || 'Unknown') === selectedCountry.value)
     .filter((ac) => (ac.city || 'Unknown') === selectedCity.value)
     .filter((ac) => (ac.fleet || 'Default Fleet') === selectedFleet.value)
@@ -331,6 +348,22 @@ function onFleetChange(e) {
   cursor: not-allowed;
   opacity: 0.7;
   background-color: #f8fafc;
+}
+
+.data-status {
+  max-width: 900px;
+  margin: 0 auto 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #eff6ff;
+  color: #1e40af;
+  font-weight: 700;
+  text-align: center;
+}
+
+.data-status-error {
+  background: #fef2f2;
+  color: #b91c1c;
 }
 
 .placeholder {
