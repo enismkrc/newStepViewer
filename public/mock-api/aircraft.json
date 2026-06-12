@@ -7,6 +7,11 @@
     "tailNumber": "KF-21-01",
     "displayName": "KF-21 Boramae 01",
     "modelUrl": "/KF-21.gltf",
+    "viewConfig": {
+      "modelRotation": { "x": 0, "y": 3.141592653589793, "z": 0 },
+      "cameraOffset": { "x": 0.85, "y": 0.65, "z": -0.85 },
+      "swapFrontBack": true
+    },
     "hasFault": true,
     "faults": [
       { "part": "Left engine", "type": "FAULT", "fin": "28471", "status": "FAULT", "warningFaults": "High TET (Turbine Exit Temp) and N2 vibration exceedance. Inspect for FOD / blade damage per AMM 72-00-00." },
@@ -25,6 +30,11 @@
     "tailNumber": "KF-21-02",
     "displayName": "KF-21 Boramae 02",
     "modelUrl": "/KF-21.gltf",
+    "viewConfig": {
+      "modelRotation": { "x": 0, "y": 3.141592653589793, "z": 0 },
+      "cameraOffset": { "x": 0.85, "y": 0.65, "z": -0.85 },
+      "swapFrontBack": true
+    },
     "hasFault": true,
     "faults": [
       { "part": "Nose Landing gear", "type": "FAULT", "fin": "32101", "status": "FAULT", "warningFaults": "Nose gear WOW / position sensor out of tolerance. Calibrate per AMM 32-21-00 or replace sensor P/N 32101-002." }
@@ -38,6 +48,11 @@
     "tailNumber": "KF-21-03",
     "displayName": "KF-21 Boramae 03",
     "modelUrl": "/KF-21.gltf",
+    "viewConfig": {
+      "modelRotation": { "x": 0, "y": 3.141592653589793, "z": 0 },
+      "cameraOffset": { "x": 0.85, "y": 0.65, "z": -0.85 },
+      "swapFrontBack": true
+    },
     "hasFault": false,
     "faults": []
   },
@@ -49,6 +64,11 @@
     "tailNumber": "IF-21-01",
     "displayName": "KF-21 (IF-X) 01",
     "modelUrl": "/KF-21.gltf",
+    "viewConfig": {
+      "modelRotation": { "x": 0, "y": 3.141592653589793, "z": 0 },
+      "cameraOffset": { "x": 0.85, "y": 0.65, "z": -0.85 },
+      "swapFrontBack": true
+    },
     "hasFault": false,
     "faults": []
   },
@@ -60,6 +80,11 @@
     "tailNumber": "KF-21-05",
     "displayName": "KF-21 Boramae 05",
     "modelUrl": "/KF-21.gltf",
+    "viewConfig": {
+      "modelRotation": { "x": 0, "y": 3.141592653589793, "z": 0 },
+      "cameraOffset": { "x": 0.85, "y": 0.65, "z": -0.85 },
+      "swapFrontBack": true
+    },
     "hasFault": true,
     "faults": [
       { "part": "Right engine", "type": "FAULT", "fin": "28472", "status": "FAULT", "warningFaults": "Right engine high TET and N2 vibration exceedance. Inspect for FOD / blade damage per AMM 72-00-00." }

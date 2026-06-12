@@ -140,20 +140,19 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { ViewportGizmo } from 'three-viewport-gizmo'
 import { createViewportGizmo } from '../three/viewportGizmoConfig.js'
 import '../three/viewportGizmo.css'
-import { DEFAULT_VIEW, applyDefaultModelOrientation, frameCameraOnBox } from '../three/defaultView.js'
+import { mergeViewConfig, applyModelOrientation, frameCameraOnBox } from '../three/defaultView.js'
 
 /**
  * HMS (Health Management System) viewer (Three.js)
  *
  * Main responsibilities:
  * - Load a GLB/glTF model from `modelUrl` (binary glTF, loaded natively by Three.js).
- * - Highlight the "faulty" part in red. The faulty part name comes from `props.faultyPart`,
- *   which is set by the selected aircraft record (see `src/data/aircraft.js`).
+ * - Highlight faulty parts from API `faults[]` (part names must match glTF node names).
  * - Allow interaction: hover highlight, click to isolate a part and zoom camera to it.
  * - Optional: if `detailModelUrl` is provided, clicking the faulty part can switch to a deeper/detail model.
  */
 const props = defineProps({
-  modelUrl: { type: String, default: '/KF-21.gltf' },
+  modelUrl: { type: String, default: '' },
   /**
    * Name of the part that should be treated as "faulty" and highlighted in red.
    * This is passed from the parent page (selected aircraft).
@@ -181,8 +180,15 @@ const props = defineProps({
   /** LRU records for this aircraft (from API). Linked to parts via `part` field. */
   lruList: { type: Array, default: () => [] },
   /** MFL records for this aircraft (from API). Linked to parts via `part` field. */
-  mflList: { type: Array, default: () => [] }
+  mflList: { type: Array, default: () => [] },
+  /**
+   * Optional per-aircraft viewer tuning (from API / mock JSON).
+   * { modelRotation?: {x,y,z}, cameraOffset?: {x,y,z}, zoom?: {...}, swapFrontBack?: boolean }
+   */
+  viewConfig: { type: Object, default: null }
 })
+
+const activeViewConfig = computed(() => mergeViewConfig(props.viewConfig))
 
 const canvasEl = ref(null)
 const statusText = ref('Loading model...')
@@ -363,7 +369,8 @@ function initViewportGizmo() {
     camera,
     renderer,
     controls,
-    container
+    container,
+    { swapFrontBack: activeViewConfig.value.swapFrontBack }
   )
 }
 
@@ -401,7 +408,7 @@ function initThree() {
   controls.maxDistance = 100000
 
   modelGroup = new THREE.Group()
-  applyDefaultModelOrientation(modelGroup)
+  applyModelOrientation(modelGroup, activeViewConfig.value)
   scene.add(modelGroup)
 
   raycaster = new THREE.Raycaster()
@@ -680,7 +687,7 @@ function isolatePart(mesh) {
   // - We isolate the mesh (hide others)
   // - Then we fit the camera to the mesh bounding box via `focusToBox`
   // - Smaller multiplier => closer zoom
-  if (!bbox.isEmpty()) focusToBox(bbox, DEFAULT_VIEW.zoom.part)
+  if (!bbox.isEmpty()) focusToBox(bbox, activeViewConfig.value.zoom.part)
 }
 
 /**
@@ -706,7 +713,7 @@ function isolateByName(name) {
   const bbox = new THREE.Box3()
   matches.forEach((m) => bbox.union(new THREE.Box3().setFromObject(m)))
   if (!bbox.isEmpty()) {
-    focusToBox(bbox, matches.length === 1 ? DEFAULT_VIEW.zoom.part : DEFAULT_VIEW.zoom.assembly)
+    focusToBox(bbox, matches.length === 1 ? activeViewConfig.value.zoom.part : activeViewConfig.value.zoom.assembly)
   }
 }
 
@@ -767,14 +774,14 @@ function toggleWireframe() {
   setWireframe(!wireframe.value)
 }
 
-function focusToBox(bbox, distanceMultiplier = DEFAULT_VIEW.zoom.fullModel) {
-  frameCameraOnBox(camera, controls, bbox, distanceMultiplier, modelGroup)
+function focusToBox(bbox, distanceMultiplier = activeViewConfig.value.zoom.fullModel) {
+  frameCameraOnBox(camera, controls, bbox, distanceMultiplier, modelGroup, activeViewConfig.value)
 }
 
 function resetView() {
   if (!modelGroup || modelGroup.children.length === 0) return
   const bbox = new THREE.Box3().setFromObject(modelGroup)
-  if (!bbox.isEmpty()) focusToBox(bbox, DEFAULT_VIEW.zoom.fullModel)
+  if (!bbox.isEmpty()) focusToBox(bbox, activeViewConfig.value.zoom.fullModel)
 }
 
 /**
@@ -911,7 +918,7 @@ function renderGltf(gltf) {
 
   modelGroup.updateMatrixWorld(true)
   const fitBox = new THREE.Box3().setFromObject(modelGroup)
-  if (!fitBox.isEmpty()) focusToBox(fitBox, DEFAULT_VIEW.zoom.fullModel)
+  if (!fitBox.isEmpty()) focusToBox(fitBox, activeViewConfig.value.zoom.fullModel)
 }
 
 async function loadModelFromUrl(url) {

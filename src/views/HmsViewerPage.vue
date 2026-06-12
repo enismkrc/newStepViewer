@@ -16,6 +16,7 @@
         <HmsViewer
           :key="aircraft.id"
           :model-url="aircraft.modelUrl"
+          :view-config="aircraft.viewConfig"
           :faulty-part="aircraft.faultyPart"
           :fault-type="aircraft.faultType"
           :faults="aircraft.faults"

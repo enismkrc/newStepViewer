@@ -133,7 +133,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { ViewportGizmo } from 'three-viewport-gizmo'
 import { createViewportGizmo } from '../three/viewportGizmoConfig.js'
 import '../three/viewportGizmo.css'
-import { DEFAULT_VIEW, applyDefaultModelOrientation, frameCameraOnBox } from '../three/defaultView.js'
+import { DEFAULT_VIEW, frameCameraOnBox } from '../three/defaultView.js'
 
 const canvasEl = ref(null)
 const statusText = ref('Select a GLB / glTF file to load.')
@@ -222,7 +222,7 @@ const partDetailData = computed(() => {
   if (isEngine) {
     return {
       partName: part,
-      parentAssembly: 'KF-21 Boramae — Propulsion Module (F414-GE-400)',
+      parentAssembly: 'Propulsion module',
       replacementRequirement: 'On-condition; replace if TET/vibration limits exceeded or FOD confirmed',
       stockStatus: 'In stock (2 units) — P/N 28471-001',
       ataChapter: 'ATA 72 — Engine',
@@ -235,7 +235,7 @@ const partDetailData = computed(() => {
     const isFrontLG = /front\s*lg|nose\s*gear/i.test(part)
     return {
       partName: part === 'Front LG' ? 'Front LG (Front Landing Gear)' : part,
-      parentAssembly: isFrontLG ? 'KF-21 Boramae — Nose Landing Gear Assembly (ATA 32-21)' : 'KF-21 Boramae — Landing Gear Assembly',
+      parentAssembly: isFrontLG ? 'Nose landing gear assembly' : 'Landing gear assembly',
       replacementRequirement: isFrontLG
         ? 'Sensor fault: replace or calibrate per AMM 32-21-00. Main gear scheduled per MSG-3.'
         : 'Scheduled overhaul per MSG-3; replace at wear limit',
@@ -248,7 +248,7 @@ const partDetailData = computed(() => {
   }
   return {
     partName: part,
-    parentAssembly: 'KF-21 Boramae',
+    parentAssembly: 'Aircraft assembly',
     replacementRequirement: 'On-condition or scheduled per AMM and CMM',
     stockStatus: 'Supply on request',
     ataChapter: '—',
@@ -330,7 +330,6 @@ function initThree() {
   controls.maxDistance = 100000
 
   modelGroup = new THREE.Group()
-  applyDefaultModelOrientation(modelGroup)
   scene.add(modelGroup)
 
   raycaster = new THREE.Raycaster()
@@ -581,7 +580,7 @@ function toggleWireframe() {
 }
 
 function focusToBox(bbox, distanceMultiplier = DEFAULT_VIEW.zoom.fullModel) {
-  frameCameraOnBox(camera, controls, bbox, distanceMultiplier, modelGroup)
+  frameCameraOnBox(camera, controls, bbox, distanceMultiplier, null, DEFAULT_VIEW)
 }
 
 function resetView() {

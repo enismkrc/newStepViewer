@@ -11,7 +11,7 @@ const FACE_STYLE = {
   }
 }
 
-export const VIEWPORT_GIZMO_OPTIONS = {
+const VIEWPORT_GIZMO_BASE = {
   type: 'cube',
   placement: 'top-right',
   size: 132,
@@ -23,44 +23,40 @@ export const VIEWPORT_GIZMO_OPTIONS = {
     color: '#475569',
     opacity: 1,
     scale: 0.26,
-    hover: {
-      color: '#2563eb',
-      opacity: 1,
-      scale: 0.3
-    }
+    hover: { color: '#2563eb', opacity: 1, scale: 0.3 }
   },
   edges: {
     enabled: true,
     color: '#334155',
-    opacity: 0.85,
+    opacity: 1,
     scale: 1,
-    hover: {
-      color: '#2563eb',
-      opacity: 1
-    }
+    hover: { color: '#2563eb', opacity: 1 }
   },
   top: { ...FACE_STYLE, label: 'TOP' },
-  // Model burun yönü -Z olduğu için +Z ekseni kuyruk, -Z ekseni burun tarafı.
-  front: { ...FACE_STYLE, label: 'BACK' },
-  back: { ...FACE_STYLE, label: 'FRONT' },
   right: { ...FACE_STYLE, label: 'RIGHT' },
   left: { ...FACE_STYLE, label: 'LEFT' },
-  bottom: { ...FACE_STYLE, label: 'BOTTOM' },
+  bottom: { ...FACE_STYLE, label: 'BOTTOM' }
+}
+
+export function buildViewportGizmoOptions({ swapFrontBack = false } = {}) {
+  return {
+    ...VIEWPORT_GIZMO_BASE,
+    front: { ...FACE_STYLE, label: swapFrontBack ? 'BACK' : 'FRONT' },
+    back: { ...FACE_STYLE, label: swapFrontBack ? 'FRONT' : 'BACK' }
+  }
 }
 
 export const VIEWPORT_GIZMO_CLASS = 'view-cube-widget'
-
-/** Mouse küp üzerinde değilken opaklık (0–1). WebGL viewport ile çizildiği için CSS opacity işe yaramaz. */
 export const GIZMO_IDLE_OPACITY = 0.3
 
-function applyGizmoOpacity(gizmo, multiplier) {
+/** Tüm küpe aynı opaklık — yüz/kenar/köşe ayrı ayrı değil. */
+function applyUniformGizmoOpacity(gizmo, opacity) {
   gizmo.traverse((obj) => {
     if (!obj.isMesh && !obj.isSprite) return
     const mat = obj.material
     if (!mat) return
-    const base = obj.userData.opacity ?? 1
-    mat.opacity = base * multiplier
-    mat.transparent = true
+    mat.opacity = opacity
+    mat.transparent = opacity < 1
   })
 }
 
@@ -69,10 +65,17 @@ function bindGizmoFade(gizmo, container) {
   if (!el) return
 
   let widgetHovered = false
-  const onEnter = () => { widgetHovered = true }
+  const syncOpacity = () => {
+    applyUniformGizmoOpacity(gizmo, widgetHovered ? 1 : GIZMO_IDLE_OPACITY)
+  }
+
+  const onEnter = () => {
+    widgetHovered = true
+    syncOpacity()
+  }
   const onLeave = () => {
     widgetHovered = false
-    applyGizmoOpacity(gizmo, GIZMO_IDLE_OPACITY)
+    syncOpacity()
   }
 
   el.addEventListener('pointerenter', onEnter)
@@ -81,7 +84,8 @@ function bindGizmoFade(gizmo, container) {
   const origRender = gizmo.render.bind(gizmo)
   gizmo.render = () => {
     const result = origRender()
-    if (!widgetHovered) applyGizmoOpacity(gizmo, GIZMO_IDLE_OPACITY)
+    // Kütüphane yüz hover'ında parça parça opacity değiştirir; her karede eşitle.
+    syncOpacity()
     return result
   }
 
@@ -92,12 +96,12 @@ function bindGizmoFade(gizmo, container) {
     origDispose()
   }
 
-  onLeave()
+  syncOpacity()
 }
 
-export function createViewportGizmo(ViewportGizmo, camera, renderer, controls, container) {
+export function createViewportGizmo(ViewportGizmo, camera, renderer, controls, container, gizmoOptions = {}) {
   const gizmo = new ViewportGizmo(camera, renderer, {
-    ...VIEWPORT_GIZMO_OPTIONS,
+    ...buildViewportGizmoOptions(gizmoOptions),
     className: VIEWPORT_GIZMO_CLASS,
     container
   })

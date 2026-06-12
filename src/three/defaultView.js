@@ -1,43 +1,43 @@
 import * as THREE from 'three'
 
 /**
- * Varsayılan model yönü ve ilk kamera açısı.
- * İlk yükleme, Reset view ve uçak değişiminde kullanılır.
- *
- * cameraOffset → ViewCube TOP + LEFT + BACK köşe görünümü (sol-üst-arka izometrik).
- * modelRotation.y → üstten bakınca burun yukarı; front/back etiketleri viewportGizmoConfig'te.
+ * Generic defaults — glTF Y-up, no model rotation, standard isometric camera.
+ * Per-aircraft overrides: mock API `viewConfig` (see aircraft.json).
  */
 export const DEFAULT_VIEW = {
-  modelRotation: {
-    x: 0,
-    y: Math.PI,
-    z: 0
-  },
-  /** Model-local offset; modelGroup quaternion ile world'e çevrilir. */
-  cameraOffset: {
-    x: 0.85,
-    y: 0.65,
-    z: -0.85
-  },
-  zoom: {
-    fullModel: 0.5,
-    part: 1.2,
-    assembly: 1.5
+  modelRotation: { x: 0, y: 0, z: 0 },
+  cameraOffset: { x: 0.85, y: 0.65, z: 0.85 },
+  zoom: { fullModel: 0.5, part: 1.2, assembly: 1.5 },
+  /** true when model nose points -Z (ViewCube FRONT/BACK labels swap). */
+  swapFrontBack: false
+}
+
+export function mergeViewConfig(override) {
+  if (!override || typeof override !== 'object') {
+    return {
+      modelRotation: { ...DEFAULT_VIEW.modelRotation },
+      cameraOffset: { ...DEFAULT_VIEW.cameraOffset },
+      zoom: { ...DEFAULT_VIEW.zoom },
+      swapFrontBack: DEFAULT_VIEW.swapFrontBack
+    }
+  }
+  return {
+    modelRotation: { ...DEFAULT_VIEW.modelRotation, ...override.modelRotation },
+    cameraOffset: { ...DEFAULT_VIEW.cameraOffset, ...override.cameraOffset },
+    zoom: { ...DEFAULT_VIEW.zoom, ...override.zoom },
+    swapFrontBack: override.swapFrontBack ?? DEFAULT_VIEW.swapFrontBack
   }
 }
 
 const _cameraOffsetVec = new THREE.Vector3()
 
-export function applyDefaultModelOrientation(group) {
+export function applyModelOrientation(group, viewConfig = DEFAULT_VIEW) {
   if (!group) return
-  const r = DEFAULT_VIEW.modelRotation
-  group.rotation.set(r.x, r.y, r.z)
+  const r = viewConfig.modelRotation
+  group.rotation.set(r.x ?? 0, r.y ?? 0, r.z ?? 0)
 }
 
-/**
- * Fit camera to a bounding box using DEFAULT_VIEW offset (same angle as initial load).
- */
-export function frameCameraOnBox(camera, controls, bbox, distanceMultiplier, modelGroup = null) {
+export function frameCameraOnBox(camera, controls, bbox, distanceMultiplier, modelGroup, viewConfig = DEFAULT_VIEW) {
   if (!camera || !controls || !bbox) return
 
   const center = new THREE.Vector3()
@@ -51,7 +51,7 @@ export function frameCameraOnBox(camera, controls, bbox, distanceMultiplier, mod
   distance *= camera.aspect > 1 ? camera.aspect : 1
   distance *= distanceMultiplier
 
-  const off = DEFAULT_VIEW.cameraOffset
+  const off = viewConfig.cameraOffset
   _cameraOffsetVec.set(off.x, off.y, off.z)
   if (modelGroup) _cameraOffsetVec.applyQuaternion(modelGroup.quaternion)
 
