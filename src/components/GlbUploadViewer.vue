@@ -130,6 +130,10 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
+import { ViewportGizmo } from 'three-viewport-gizmo'
+import { createViewportGizmo } from '../three/viewportGizmoConfig.js'
+import '../three/viewportGizmo.css'
+import { DEFAULT_VIEW, applyDefaultModelOrientation, frameCameraOnBox } from '../three/defaultView.js'
 
 const canvasEl = ref(null)
 const statusText = ref('Select a GLB / glTF file to load.')
@@ -275,7 +279,22 @@ let raycaster = null
 let pointer = null
 let hoveredMesh = null
 let isolatedMesh = null
+let viewportGizmo = null
 const gltfLoader = new GLTFLoader()
+
+function initViewportGizmo() {
+  const container = stageRef.value || canvasEl.value?.parentElement
+  if (!camera || !renderer || !controls || !container) return
+
+  viewportGizmo?.dispose()
+  viewportGizmo = createViewportGizmo(
+    ViewportGizmo,
+    camera,
+    renderer,
+    controls,
+    container
+  )
+}
 
 function initThree() {
   const canvas = canvasEl.value
@@ -311,8 +330,7 @@ function initThree() {
   controls.maxDistance = 100000
 
   modelGroup = new THREE.Group()
-  // Generic preview: respect the file's own orientation (glTF standard is Y-up, which is
-  // what our KF-21 export uses). Z-up exports would appear on their side here.
+  applyDefaultModelOrientation(modelGroup)
   scene.add(modelGroup)
 
   raycaster = new THREE.Raycaster()
@@ -320,6 +338,8 @@ function initThree() {
   canvas.addEventListener('pointermove', onPointerMove)
   canvas.addEventListener('pointerleave', onPointerLeave)
   canvas.addEventListener('pointerdown', onPointerDown)
+
+  initViewportGizmo()
 
   onResize()
   window.addEventListener('resize', onResize)
@@ -365,6 +385,7 @@ function loop() {
   }
 
   renderer?.render(scene, camera)
+  viewportGizmo?.render()
 }
 
 function onResize() {
@@ -376,6 +397,7 @@ function onResize() {
   renderer.setSize(width, height, false)
   camera.aspect = width / height
   camera.updateProjectionMatrix()
+  viewportGizmo?.update()
 }
 
 function disposeObject(obj) {
@@ -558,29 +580,14 @@ function toggleWireframe() {
   setWireframe(!wireframe.value)
 }
 
-function focusToBox(bbox, distanceMultiplier = 4.0) {
-  if (!camera || !controls) return
-  const center = new THREE.Vector3()
-  const size = new THREE.Vector3()
-  bbox.getCenter(center)
-  bbox.getSize(size)
-
-  const maxDim = Math.max(size.x, size.y, size.z)
-  const fov = camera.fov * (Math.PI / 180)
-  let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2))
-  cameraZ *= camera.aspect > 1 ? camera.aspect : 1
-  cameraZ *= distanceMultiplier
-
-  camera.position.set(center.x + cameraZ * 0.55, center.y + cameraZ * 0.35, center.z + cameraZ)
-  camera.lookAt(center)
-  controls.target.copy(center)
-  controls.update()
+function focusToBox(bbox, distanceMultiplier = DEFAULT_VIEW.zoom.fullModel) {
+  frameCameraOnBox(camera, controls, bbox, distanceMultiplier, modelGroup)
 }
 
 function resetView() {
   if (!modelGroup || modelGroup.children.length === 0) return
   const bbox = new THREE.Box3().setFromObject(modelGroup)
-  if (!bbox.isEmpty()) focusToBox(bbox, 0.5)
+  if (!bbox.isEmpty()) focusToBox(bbox, DEFAULT_VIEW.zoom.fullModel)
 }
 
 let treeIdCounter = 0
@@ -781,7 +788,7 @@ function renderGltf(gltf) {
 
   modelGroup.updateMatrixWorld(true)
   const fitBox = new THREE.Box3().setFromObject(modelGroup)
-  if (!fitBox.isEmpty()) focusToBox(fitBox, 0.5)
+  if (!fitBox.isEmpty()) focusToBox(fitBox, DEFAULT_VIEW.zoom.fullModel)
 }
 
 async function onFileChange(event) {
@@ -826,8 +833,10 @@ onBeforeUnmount(() => {
     canvas.removeEventListener('pointerleave', onPointerLeave)
     canvas.removeEventListener('pointerdown', onPointerDown)
   }
+  viewportGizmo?.dispose()
   controls?.dispose()
   renderer?.dispose()
+  viewportGizmo = null
   scene = camera = renderer = controls = modelGroup = null
 })
 </script>

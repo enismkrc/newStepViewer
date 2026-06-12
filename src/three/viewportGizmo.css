@@ -1,0 +1,5 @@
+/* ViewCube hit-area div (görüntü WebGL canvas viewport'unda çizilir). */
+.view-cube-widget {
+  z-index: 15;
+  pointer-events: auto;
+}
