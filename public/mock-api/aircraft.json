@@ -13,7 +13,7 @@
       { "part": "Landing gear", "type": "FAULT", "fin": "32101", "status": "FAULT", "warningFaults": "WOW / position sensor out of tolerance. Calibrate per AMM 32-21-00 or replace sensor P/N 32101-002." },
       { "part": "R_Rudder", "type": "FAULT", "fin": "27410", "status": "FAULT", "warningFaults": "Rudder actuator feedback drift detected. Inspect actuator and harness per AMM 27-20-00." },
       { "part": "L_Flaperon", "type": "FAULT", "fin": "27155", "status": "FAULT", "warningFaults": "Flaperon actuator position feedback out of range. Possible hydraulic/electrical fault. Inspect per AMM 27-10-00." },
-      { "part": "Cockpit", "type": "WARNING", "fin": "31220", "status": "WARNING", "warningFaults": "Cockpit display BIT intermittent. Check avionics connectors and power per AMM 31-00-00." },
+      { "part": "Cockpit", "type": "FAULT", "fin": "31220", "status": "FAULT", "warningFaults": "Cockpit display BIT intermittent. Check avionics connectors and power per AMM 31-00-00." },
       { "part": "IRIS-T003", "type": "FAULT", "fin": "94110", "status": "FAULT", "warningFaults": "Missile station no response on self-test. Check pylon/store interface per AMM 94-00-00." }
     ]
   },

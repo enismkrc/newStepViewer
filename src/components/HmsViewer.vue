@@ -16,7 +16,7 @@
         <button v-if="isIsolated || isDetailView" class="btn btn-back" @click="showAllParts">
           ← Show all
         </button>
-        <button v-if="isIsolated && partDetailData" type="button" class="btn btn-panel-toggle" :class="{ active: partDetailPanelOpen }" @click="partDetailPanelOpen = !partDetailPanelOpen">
+        <button v-if="isIsolated && isolatedName" type="button" class="btn btn-panel-toggle" :class="{ active: partDetailPanelOpen }" @click="partDetailPanelOpen = !partDetailPanelOpen">
           {{ partDetailPanelOpen ? 'Close detail' : 'Part detail' }}
         </button>
       </div>
@@ -27,7 +27,7 @@
       <div v-if="errorText" class="errorText">{{ errorText }}</div>
     </div>
 
-    <div class="stage-wrapper" :class="{ 'stage-wrapper-split': isIsolated && partDetailData && partDetailPanelOpen }">
+    <div class="stage-wrapper" :class="{ 'stage-wrapper-split': isIsolated && isolatedName && partDetailPanelOpen }">
       <div class="stage" ref="stageRef">
         <canvas ref="canvasEl" class="canvas"></canvas>
         <button
@@ -51,9 +51,9 @@
           <div class="fault-label-line"></div>
           <div class="fault-label-box">
             <div class="fault-card-row fault-card-fin">FIN# {{ activeFaultLabel.card.fin }}</div>
-            <div class="fault-card-row"><span class="fault-card-label">Part Name:</span> {{ activeFaultLabel.card.partName }}</div>
-            <div class="fault-card-row"><span class="fault-card-label">Status:</span> <span class="fault-card-status">{{ activeFaultLabel.card.status }}</span></div>
-            <div class="fault-card-row fault-card-warnings"><span class="fault-card-label">Warning/Faults:</span> {{ activeFaultLabel.card.warningFaults }}</div>
+            <div class="fault-card-row"><span class="fault-card-label">LRU:</span> {{ activeFaultLabel.card.lruName }}</div>
+            <div class="fault-card-row"><span class="fault-card-label">MFL Id:</span> {{ activeFaultLabel.card.mflId }}</div>
+            <div class="fault-card-row fault-card-desc"><span class="fault-card-label">Description:</span> {{ activeFaultLabel.card.description }}</div>
           </div>
         </div>
         <div v-if="hasFaults && !isIsolated" class="fault-list-panel">
@@ -69,34 +69,63 @@
               @click="focusFault(f.id)"
             >
               <span class="fault-list-num">{{ i + 1 }}</span>
-              <span class="fault-list-name">{{ f.card.partName }}</span>
-              <span class="fault-list-status" :class="statusClass(f.card.status)">{{ f.card.status }}</span>
+              <span class="fault-list-name">{{ f.card.lruName }}</span>
+              <span class="fault-list-mfl">{{ f.card.mflId }}</span>
             </li>
           </ul>
         </div>
       </div>
-      <aside v-if="isIsolated && partDetailPanelOpen && partDetailData" class="part-detail-panel">
+      <aside v-if="isIsolated && partDetailPanelOpen && isolatedName" class="part-detail-panel">
         <div class="part-detail-panel-header">
           <h3 class="part-detail-title">Part Detail</h3>
           <button type="button" class="part-detail-close" aria-label="Close" @click="partDetailPanelOpen = false">×</button>
         </div>
-        <div class="part-detail-heading">{{ partDetailData.partName }}</div>
-        <dl class="part-detail-list">
-          <dt>Parent Assembly</dt>
-          <dd>{{ partDetailData.parentAssembly }}</dd>
-          <dt>Replacement requirement</dt>
-          <dd>{{ partDetailData.replacementRequirement }}</dd>
-          <dt>Stock status</dt>
-          <dd>{{ partDetailData.stockStatus }}</dd>
-          <dt>ATA chapter</dt>
-          <dd>{{ partDetailData.ataChapter }}</dd>
-          <dt>Lead time</dt>
-          <dd>{{ partDetailData.leadTime }}</dd>
-          <dt>Serial no. range</dt>
-          <dd>{{ partDetailData.serialRange }}</dd>
-          <dt>Remarks</dt>
-          <dd>{{ partDetailData.remarks }}</dd>
+        <div class="part-detail-heading">{{ isolatedName }}</div>
+
+        <dl v-if="activeFaultSummary" class="part-detail-list">
+          <dt>FIN</dt>
+          <dd>{{ activeFaultSummary.fin }}</dd>
+          <dt>LRU Name</dt>
+          <dd>{{ activeFaultSummary.lruName }}</dd>
+          <dt>MFL Id</dt>
+          <dd>{{ activeFaultSummary.mflId }}</dd>
+          <dt>Description</dt>
+          <dd>{{ activeFaultSummary.description }}</dd>
         </dl>
+
+        <div v-if="activeLru" class="detail-section">
+          <h4 class="detail-section-title">LRU</h4>
+          <dl class="part-detail-list">
+            <dt>LRU Instance Name</dt>
+            <dd>{{ activeLru.LRU_Instance_Name }}</dd>
+            <dt>LRU Serial No.</dt>
+            <dd>{{ activeLru.LRU_Serial_No }}</dd>
+          </dl>
+        </div>
+
+        <div v-if="activeMflList.length" class="detail-section">
+          <h4 class="detail-section-title">MFL ({{ activeMflList.length }})</h4>
+          <div v-for="m in activeMflList" :key="m.MFL_Id" class="mfl-block">
+            <dl class="part-detail-list">
+              <dt>MFL Id</dt>
+              <dd>{{ m.MFL_Id }}</dd>
+              <dt>Field Name</dt>
+              <dd>{{ m.MFL_Field_Name }}</dd>
+              <dt>Description</dt>
+              <dd>{{ m.MFL_Description }}</dd>
+              <dt>Absolute Time</dt>
+              <dd>{{ m.MFL_Absulut_time }}</dd>
+              <dt>Relative Time</dt>
+              <dd>{{ m.MFL_Relative_Time }}</dd>
+              <dt>Fault Code</dt>
+              <dd>{{ m.Fault_Code }}</dd>
+              <dt>Severity</dt>
+              <dd><span class="detail-status" :class="statusClass(m.Severity)">{{ m.Severity }}</span></dd>
+              <dt>Detail</dt>
+              <dd>{{ m.Description }}</dd>
+            </dl>
+          </div>
+        </div>
       </aside>
     </div>
   </div>
@@ -144,7 +173,11 @@ const props = defineProps({
    * `part` may be a leaf part OR an assembly name (whole assembly highlights red).
    * When provided, this takes precedence over the single `faultyPart`/`faultType`.
    */
-  faults: { type: Array, default: () => [] }
+  faults: { type: Array, default: () => [] },
+  /** LRU records for this aircraft (from API). Linked to parts via `part` field. */
+  lruList: { type: Array, default: () => [] },
+  /** MFL records for this aircraft (from API). Linked to parts via `part` field. */
+  mflList: { type: Array, default: () => [] }
 })
 
 const canvasEl = ref(null)
@@ -231,110 +264,41 @@ function statusClass(status) {
 }
 
 /**
- * Build the overlay/list card content for a fault. Values from the aircraft data
- * (`override.fin/status/warningFaults`) win; otherwise we fall back to demo text
- * derived from the part name and fault type.
+ * Build a compact fault summary card from aircraft fault + LRU/MFL API data.
+ * Shown on hover (pin / list row). Full detail is in the part detail panel.
  */
 function makeFaultCard(part, type, override = {}) {
   if (!part) return null
-  const isFrontLG = part === 'Front LG' || /front\s*lg|nose\s*gear/i.test(part)
-  const isFrontLGSensor = (part === 'Front LG' && type === 'SENSOR') || /nose\s*landing/i.test(part)
-  const isEngine = /engine/i.test(part)
-  let base
-  if (isFrontLG || /landing\s*gear/i.test(part)) {
-    base = {
-      fin: '32101',
-      partName: part,
-      status: type === 'FAULT' ? 'FAULT' : 'WARNING',
-      warningFaults: isFrontLGSensor
-        ? 'Sensor fault: position/weight-on-wheels (WOW) out of tolerance. Calibrate per AMM 32-21-00 or replace sensor P/N 32101-002.'
-        : 'Anomaly reported on landing gear. ATA 32. Inspect per AMM 32-00-00.'
-    }
-  } else if (isEngine) {
-    base = {
-      fin: '28471',
-      partName: part,
-      status: type === 'WARNING' ? 'WARNING' : 'FAULT',
-      warningFaults: 'High TET / N2 vibration exceedance. Inspect for FOD / blade damage per AMM 72-00-00.'
-    }
-  } else {
-    base = {
-      fin: '-----',
-      partName: part,
-      status: type || 'WARNING',
-      warningFaults: `Anomaly reported on ${part}. Inspect per AMM.`
-    }
-  }
+  const mflRecords = props.mflList.filter((r) => r.part === part)
+  const primaryMfl = mflRecords[0] ?? null
   return {
-    fin: override.fin ?? base.fin,
-    partName: base.partName,
-    status: override.status ?? base.status,
-    warningFaults: override.warningFaults ?? base.warningFaults
+    fin: override.fin ?? '-----',
+    lruName: part,
+    mflId: primaryMfl?.MFL_Id ?? '—',
+    description: primaryMfl?.Description ?? primaryMfl?.MFL_Description ?? override.warningFaults ?? '—'
   }
 }
 
-const partDetailData = computed(() => {
-  const part = isolatedPartName.value
-  if (!part) return null
-  const isEngine = /engine/i.test(part)
-  const isCentralMountingShaft = /central\s*mounting\s*shaft/i.test(part)
-  const isLandingGear = /lg|landing|gear/i.test(part)
-  const isFrontLGSensor = part === 'Front LG' && props.faultType === 'SENSOR'
-  if (isCentralMountingShaft) {
-    return {
-      partName: 'Central Mounting Shaft',
-      parentAssembly: 'F135-PW-100 — Jet engine Assem1 (Engine core)',
-      replacementRequirement: 'On-condition; replace if runout or bearing clearance out of limits. Inspect per AMM 72-00-00.',
-      stockStatus: 'In stock (1 unit) — P/N 28472-001',
-      ataChapter: 'ATA 72 — Engine (72-00 Power Plant)',
-      leadTime: '48–72 hours (central depot)',
-      serialRange: 'SN 28472001 – 28472100',
-      remarks: 'Shaft runout and bearing clearance check required. EASA Form 1 / 8130-3 required.'
-    }
-  }
-  if (isEngine) {
-    return {
-      partName: part,
-      parentAssembly: 'KF-21 Boramae — Propulsion Module (F414-GE-400)',
-      replacementRequirement: 'On-condition; replace if TET/vibration limits exceeded or FOD confirmed. Inspect per AMM 72-00-00.',
-      stockStatus: 'In stock (2 units) — P/N 28471-001',
-      ataChapter: 'ATA 72 — Engine (72-00 Power Plant)',
-      leadTime: '24–48 hours (central depot)',
-      serialRange: 'SN 28471001 – 28471250',
-      remarks: 'Turbine blade inspection recommended. EASA Form 1 / 8130-3 required.'
-    }
-  }
-  if (isLandingGear || isFrontLGSensor) {
-    const isFrontLG = part === 'Front LG' || /front\s*lg|nose\s*gear/i.test(part)
-    const baseRemarks = 'Oleopneumatic shock absorber check required.'
-    const sensorRemarks = isFrontLGSensor
-      ? ' Sensor fault: position/weight-on-wheels sensor to be calibrated or replaced. Apply AMM 32-21-00 sensor calibration/replacement procedure.'
-      : ''
-    return {
-      partName: part === 'Front LG' ? 'Front LG (Front Landing Gear)' : part,
-      parentAssembly: isFrontLG ? 'KF-21 Boramae — Nose Landing Gear Assembly (ATA 32-21)' : 'KF-21 Boramae — Landing Gear Assembly',
-      replacementRequirement: isFrontLG
-        ? 'Sensor fault: replace or calibrate per AMM 32-21-00. Scheduled overhaul per MSG-3.'
-        : 'Scheduled overhaul per MSG-3; replace at wear limit',
-      stockStatus: isFrontLG
-        ? 'Sensor in stock (3 units) — P/N 32101-002. Assembly P/N 32101-001 on order.'
-        : 'In stock (1 unit) — P/N 32101-001, available on order',
-      ataChapter: isFrontLG ? 'ATA 32 — Landing Gear (32-21 Nose Gear)' : 'ATA 32 — Landing Gear',
-      leadTime: isFrontLG ? '5–7 business days (sensor 24–48 h local depot)' : '5–7 business days',
-      serialRange: 'SN 32101001 – 32101200',
-      remarks: baseRemarks + sensorRemarks
-    }
-  }
-  return {
-    partName: part,
-    parentAssembly: 'KF-21 Boramae',
-    replacementRequirement: 'On-condition or scheduled per AMM and CMM',
-    stockStatus: 'Supply on request',
-    ataChapter: '—',
-    leadTime: 'Depends on supplier',
-    serialRange: '—',
-    remarks: 'Part number and revision must be verified in AMM.'
-  }
+/** Summary card for the currently isolated part (same fields as hover card). */
+const activeFaultSummary = computed(() => {
+  const name = isolatedName.value
+  if (!name) return null
+  const fault = faultDefs.value.find((f) => f.part === name)
+  return makeFaultCard(name, fault?.type ?? null, fault ?? {})
+})
+
+/** LRU record for the currently isolated part/assembly. */
+const activeLru = computed(() => {
+  const name = isolatedName.value
+  if (!name) return null
+  return props.lruList.find((r) => r.part === name) ?? null
+})
+
+/** MFL records for the currently isolated part/assembly. */
+const activeMflList = computed(() => {
+  const name = isolatedName.value
+  if (!name) return []
+  return props.mflList.filter((r) => r.part === name)
 })
 
 watch(activeFaultNames, () => {
@@ -1176,6 +1140,33 @@ onBeforeUnmount(() => {
   margin-bottom: 0;
 }
 
+.detail-section {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.detail-section-title {
+  margin: 0 0 12px;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #475569;
+}
+
+.mfl-block {
+  padding: 12px;
+  margin-bottom: 10px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.mfl-block:last-child {
+  margin-bottom: 0;
+}
+
 .detail-status {
   display: inline-block;
   font-size: 11px;
@@ -1325,6 +1316,15 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 
+.fault-list-mfl {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #64748b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
 .fault-list-status {
   flex-shrink: 0;
   font-size: 10px;
@@ -1412,16 +1412,17 @@ onBeforeUnmount(() => {
   letter-spacing: 0.03em;
 }
 
-.fault-card-warnings {
+.fault-card-desc {
   white-space: normal;
   word-break: break-word;
   font-size: 11px;
   color: #4b5563;
-  margin-top: 6px;
+  margin-top: 4px;
   padding-top: 6px;
   border-top: 1px solid rgba(0, 0, 0, 0.08);
 }
-.fault-card-warnings .fault-card-label {
+
+.fault-card-desc .fault-card-label {
   display: block;
   margin-bottom: 2px;
 }

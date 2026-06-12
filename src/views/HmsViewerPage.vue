@@ -19,6 +19,8 @@
           :faulty-part="aircraft.faultyPart"
           :fault-type="aircraft.faultType"
           :faults="aircraft.faults"
+          :lru-list="lruList"
+          :mfl-list="mflList"
           :detail-model-url="aircraft.detailModelUrl"
           :detail-faulty-part="aircraft.detailFaultyPart"
         />
@@ -31,23 +33,34 @@
 import { ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { getAircraftById } from '../api/aircraft'
+import { getLruByAircraftId } from '../api/lru'
+import { getMflByAircraftId } from '../api/mfl'
 import HmsViewer from '../components/HmsViewer.vue'
 
 const route = useRoute()
 
-// The viewer page is routed as `/view/:aircraftId`. We load that single aircraft from
-// the API service (mock JSON now, real backend later).
 const aircraft = ref(null)
+const lruList = ref([])
+const mflList = ref([])
 const loading = ref(true)
 const loadError = ref('')
 
 async function loadAircraft(id) {
   loading.value = true
   loadError.value = ''
+  lruList.value = []
+  mflList.value = []
   try {
-    aircraft.value = await getAircraftById(id)
+    const [ac, lru, mfl] = await Promise.all([
+      getAircraftById(id),
+      getLruByAircraftId(id),
+      getMflByAircraftId(id)
+    ])
+    aircraft.value = ac
+    lruList.value = lru
+    mflList.value = mfl
   } catch (err) {
-    console.error('Failed to load aircraft:', err)
+    console.error('Failed to load aircraft data:', err)
     loadError.value = 'Uçak bilgisi yüklenemedi.'
     aircraft.value = null
   } finally {
