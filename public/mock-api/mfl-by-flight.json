@@ -1,0 +1,111 @@
+{
+  "flight-101": {
+    "mflDataList": [
+      {
+        "finNumber": "Left engine",
+        "absoluteTime": "2026-06-10T14:32:18Z",
+        "relativeTime": "T+00:12:45",
+        "faultCode": "72-001",
+        "severity": "FAULT",
+        "category": "PROPULSION",
+        "description": "TET above limit for 8 consecutive seconds. N2 vibration secondary alert active."
+      },
+      {
+        "finNumber": "Left engine",
+        "absoluteTime": "2026-06-10T14:32:20Z",
+        "relativeTime": "T+00:12:47",
+        "faultCode": "72-014",
+        "severity": "FAULT",
+        "category": "PROPULSION",
+        "description": "N2 vibration peak 1.8x threshold. Recommend borescope inspection."
+      },
+      {
+        "finNumber": "Landing gear",
+        "absoluteTime": "2026-06-10T13:05:02Z",
+        "relativeTime": "T+00:00:00",
+        "faultCode": "32-021",
+        "severity": "FAULT",
+        "category": "LANDING_GEAR",
+        "description": "WOW sensor reading inconsistent with gear position."
+      },
+      {
+        "finNumber": "R_Rudder",
+        "absoluteTime": "2026-06-10T14:10:00Z",
+        "relativeTime": "T+00:08:12",
+        "faultCode": "27-041",
+        "severity": "FAULT",
+        "category": "FLIGHT_CONTROLS",
+        "description": "Rudder actuator feedback drift detected."
+      },
+      {
+        "finNumber": "L_Flaperon",
+        "absoluteTime": "2026-06-10T14:15:33Z",
+        "relativeTime": "T+00:09:45",
+        "faultCode": "27-112",
+        "severity": "FAULT",
+        "category": "FLIGHT_CONTROLS",
+        "description": "Flaperon actuator position feedback out of range."
+      },
+      {
+        "finNumber": "Cockpit",
+        "absoluteTime": "2026-06-10T12:58:11Z",
+        "relativeTime": "T+00:00:00",
+        "faultCode": "31-008",
+        "severity": "FAULT",
+        "category": "AVIONICS",
+        "description": "Cockpit display BIT intermittent."
+      },
+      {
+        "finNumber": "IRIS-T003",
+        "absoluteTime": "2026-06-10T14:20:05Z",
+        "relativeTime": "T+00:10:17",
+        "faultCode": "94-003",
+        "severity": "FAULT",
+        "category": "STORES",
+        "description": "Missile station no response on self-test."
+      }
+    ]
+  },
+  "flight-102": {
+    "mflDataList": [
+      {
+        "finNumber": "Landing gear",
+        "absoluteTime": "2026-06-11T09:00:00Z",
+        "relativeTime": "T+00:05:00",
+        "faultCode": "32-022",
+        "severity": "WARNING",
+        "category": "LANDING_GEAR",
+        "description": "Intermittent gear position sensor."
+      }
+    ]
+  },
+  "flight-201": {
+    "mflDataList": [
+      {
+        "finNumber": "Nose Landing gear",
+        "absoluteTime": "2026-06-09T11:22:00Z",
+        "relativeTime": "T+00:01:30",
+        "faultCode": "32-010",
+        "severity": "FAULT",
+        "category": "LANDING_GEAR",
+        "description": "Nose gear WOW / position sensor out of tolerance."
+      }
+    ]
+  },
+  "flight-301": {
+    "mflDataList": []
+  },
+  "flight-501": {
+    "mflDataList": [
+      {
+        "finNumber": "Right engine",
+        "absoluteTime": "2026-06-08T16:45:00Z",
+        "relativeTime": "T+00:22:10",
+        "faultCode": "72-002",
+        "severity": "FAULT",
+        "category": "PROPULSION",
+        "description": "Right engine high TET and N2 vibration exceedance."
+      }
+    ]
+  }
+}

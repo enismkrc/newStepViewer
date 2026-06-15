@@ -4,7 +4,7 @@
       <div class="hero-bg"></div>
       <div class="hero-content">
         <h1 class="hero-title">Aircraft Health Management</h1>
-        <p class="hero-subtitle">Select in order: Country → City → Fleet → Aircraft.</p>
+        <p class="hero-subtitle">Select fleet → aircraft → flight to open the model viewer.</p>
       </div>
     </section>
 
@@ -14,48 +14,37 @@
         <button v-if="canReset" type="button" class="reset-btn" @click="resetAll">Reset</button>
       </div>
 
-      <div v-if="loading" class="data-status">Loading aircraft…</div>
+      <div v-if="loadingFleets" class="data-status">Loading fleets…</div>
       <div v-else-if="loadError" class="data-status data-status-error">{{ loadError }}</div>
 
       <div class="steps">
         <div class="step">
-          <label class="step-label" for="countrySelect">Country</label>
-          <div class="select-wrap">
-            <select id="countrySelect" class="select" :value="selectedCountry" @change="onCountryChange">
-              <option value="" disabled>Select a country…</option>
-              <option v-for="c in countries" :key="c" :value="c">{{ c }}</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="step" :class="{ disabled: !selectedCountry }">
-          <label class="step-label" for="citySelect">City</label>
-          <div class="select-wrap">
-            <select
-              id="citySelect"
-              class="select"
-              :disabled="!selectedCountry"
-              :value="selectedCity"
-              @change="onCityChange"
-            >
-              <option value="" disabled>Select a city…</option>
-              <option v-for="c in cities" :key="c" :value="c">{{ c }}</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="step" :class="{ disabled: !selectedCity }">
           <label class="step-label" for="fleetSelect">Fleet</label>
           <div class="select-wrap">
             <select
               id="fleetSelect"
               class="select"
-              :disabled="!selectedCity"
-              :value="selectedFleet"
+              :value="selectedFleetId"
               @change="onFleetChange"
             >
               <option value="" disabled>Select a fleet…</option>
-              <option v-for="f in fleets" :key="f" :value="f">{{ f }}</option>
+              <option v-for="f in fleets" :key="f.id" :value="f.id">{{ f.name }}</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="step" :class="{ disabled: !selectedAircraftId }">
+          <label class="step-label" for="flightSelect">Flight</label>
+          <div class="select-wrap">
+            <select
+              id="flightSelect"
+              class="select"
+              :disabled="!selectedAircraftId || loadingFlights"
+              :value="selectedFlightId"
+              @change="onFlightChange"
+            >
+              <option value="" disabled>{{ loadingFlights ? 'Loading flights…' : 'Select a flight…' }}</option>
+              <option v-for="fl in flights" :key="fl.id" :value="fl.id">{{ fl.flightNo }}</option>
             </select>
           </div>
         </div>
@@ -63,24 +52,30 @@
     </section>
 
     <section class="aircraft-section">
-      <h2 class="section-title">Aircraft (Tail Number)</h2>
-      <div v-if="!selectedFleet" class="placeholder">
-        Choose a fleet to list aircraft.
-      </div>
+      <h2 class="section-title">Aircraft</h2>
+      <div v-if="!selectedFleetId" class="placeholder">Choose a fleet to list aircraft.</div>
+      <div v-else-if="loadingAircraft" class="placeholder">Loading aircraft…</div>
+      <div v-else-if="!aircraftList.length" class="placeholder">No aircraft in this fleet.</div>
       <div v-else class="aircraft-grid">
         <button
-          v-for="ac in filteredAircraftSorted"
+          v-for="ac in aircraftList"
           :key="ac.id"
           type="button"
           class="aircraft-card"
-          @click="goToView(ac.id)"
+          :class="{ selected: selectedAircraftId === ac.id }"
+          @click="selectAircraft(ac.id)"
         >
           <span class="aircraft-tail">{{ ac.tailNumber }}</span>
-          <span class="aircraft-name">{{ ac.displayName }}</span>
-          <span v-if="ac.hasFault" class="aircraft-fault-tag" title="Fault recorded">Fault</span>
-          <span v-else class="aircraft-ok-tag">OK</span>
-          <span class="aircraft-cta">Open viewer →</span>
+          <span class="aircraft-name">{{ ac.name }}</span>
+          <span v-if="selectedAircraftId === ac.id && selectedFlightId" class="aircraft-cta" @click.stop="goToView">
+            Open viewer →
+          </span>
+          <span v-else-if="selectedAircraftId === ac.id" class="aircraft-hint">Select a flight above</span>
         </button>
+      </div>
+
+      <div v-if="selectedAircraftId && selectedFlightId" class="open-bar">
+        <button type="button" class="open-btn" @click="goToView">Open model viewer</button>
       </div>
     </section>
   </div>
@@ -88,116 +83,99 @@
 
 <script setup>
 import { useRouter } from 'vue-router'
-import { computed, ref, onMounted } from 'vue'
-import { getAircraftList } from '../api/aircraft'
+import { computed, ref, watch, onMounted } from 'vue'
+import { findAllFleets, findAircraftByFleetId } from '../api/fleet'
+import { findFlightsByAircraftId } from '../api/flight'
 
 const router = useRouter()
 
-/**
- * Hierarchical selection is derived from the aircraft list:
- * Country -> City -> Fleet -> Aircraft
- *
- * The list is loaded from the API service (mock JSON now, real backend later). The
- * computed selectors below stay the same regardless of the data source.
- */
+const fleets = ref([])
 const aircraftList = ref([])
-const loading = ref(true)
+const flights = ref([])
+
+const loadingFleets = ref(true)
+const loadingAircraft = ref(false)
+const loadingFlights = ref(false)
 const loadError = ref('')
+
+const selectedFleetId = ref('')
+const selectedAircraftId = ref('')
+const selectedFlightId = ref('')
 
 onMounted(async () => {
   try {
-    aircraftList.value = await getAircraftList()
+    const page = await findAllFleets({ page: 0, size: 50 })
+    fleets.value = page.content ?? []
   } catch (err) {
-    console.error('Failed to load aircraft list:', err)
+    console.error('Failed to load fleets:', err)
+    loadError.value = 'Filo listesi yüklenemedi.'
+  } finally {
+    loadingFleets.value = false
+  }
+})
+
+watch(selectedFleetId, async (fleetId) => {
+  selectedAircraftId.value = ''
+  selectedFlightId.value = ''
+  flights.value = []
+  aircraftList.value = []
+  if (!fleetId) return
+  loadingAircraft.value = true
+  loadError.value = ''
+  try {
+    aircraftList.value = await findAircraftByFleetId(fleetId)
+  } catch (err) {
+    console.error('Failed to load aircraft:', err)
     loadError.value = 'Uçak listesi yüklenemedi.'
   } finally {
-    loading.value = false
+    loadingAircraft.value = false
   }
 })
 
-const selectedCountry = ref('')
-const selectedCity = ref('')
-const selectedFleet = ref('')
-
-function goToView(aircraftId) {
-  // Viewer route receives only the aircraft id. Viewer page then finds the record by id.
-  router.push({ name: 'View', params: { aircraftId } })
+async function selectAircraft(aircraftId) {
+  selectedAircraftId.value = aircraftId
+  selectedFlightId.value = ''
+  flights.value = []
+  if (!aircraftId) return
+  loadingFlights.value = true
+  try {
+    flights.value = await findFlightsByAircraftId(aircraftId)
+    if (flights.value.length === 1) selectedFlightId.value = flights.value[0].id
+  } catch (err) {
+    console.error('Failed to load flights:', err)
+    loadError.value = 'Uçuş listesi yüklenemedi.'
+  } finally {
+    loadingFlights.value = false
+  }
 }
 
-const countries = computed(() => {
-  const set = new Set()
-  for (const ac of aircraftList.value) set.add(ac.country || 'Unknown')
-  return Array.from(set).sort((a, b) => a.localeCompare(b))
-})
+function goToView() {
+  if (!selectedAircraftId.value || !selectedFlightId.value) return
+  router.push({
+    name: 'View',
+    params: {
+      aircraftId: selectedAircraftId.value,
+      flightId: selectedFlightId.value
+    }
+  })
+}
 
-const cities = computed(() => {
-  if (!selectedCountry.value) return []
-  const set = new Set()
-  for (const ac of aircraftList.value) {
-    const country = ac.country || 'Unknown'
-    if (country !== selectedCountry.value) continue
-    set.add(ac.city || 'Unknown')
-  }
-  return Array.from(set).sort((a, b) => a.localeCompare(b))
-})
-
-const fleets = computed(() => {
-  if (!selectedCountry.value || !selectedCity.value) return []
-  const set = new Set()
-  for (const ac of aircraftList.value) {
-    const country = ac.country || 'Unknown'
-    const city = ac.city || 'Unknown'
-    if (country !== selectedCountry.value) continue
-    if (city !== selectedCity.value) continue
-    set.add(ac.fleet || 'Default Fleet')
-  }
-  return Array.from(set).sort((a, b) => a.localeCompare(b))
-})
-
-const filteredAircraftSorted = computed(() => {
-  if (!selectedCountry.value || !selectedCity.value || !selectedFleet.value) return []
-  // Tail Number list is shown only after Fleet is selected.
-  return aircraftList.value
-    .filter((ac) => (ac.country || 'Unknown') === selectedCountry.value)
-    .filter((ac) => (ac.city || 'Unknown') === selectedCity.value)
-    .filter((ac) => (ac.fleet || 'Default Fleet') === selectedFleet.value)
-    .slice()
-    .sort((a, b) => (a.tailNumber || '').localeCompare(b.tailNumber || '', undefined, { numeric: true }))
-})
-
-const canReset = computed(() => !!(selectedCountry.value || selectedCity.value || selectedFleet.value))
+const canReset = computed(() => !!(selectedFleetId.value || selectedAircraftId.value || selectedFlightId.value))
 
 function resetAll() {
-  selectedCountry.value = ''
-  selectedCity.value = ''
-  selectedFleet.value = ''
-}
-
-function selectCountry(country) {
-  selectedCountry.value = country
-  selectedCity.value = ''
-  selectedFleet.value = ''
-}
-
-function selectCity(city) {
-  selectedCity.value = city
-  selectedFleet.value = ''
-}
-
-function selectFleet(fleet) {
-  selectedFleet.value = fleet
-}
-
-function onCountryChange(e) {
-  selectCountry(e.target.value)
-}
-
-function onCityChange(e) {
-  selectCity(e.target.value)
+  selectedFleetId.value = ''
+  selectedAircraftId.value = ''
+  selectedFlightId.value = ''
+  aircraftList.value = []
+  flights.value = []
 }
 
 function onFleetChange(e) {
-  selectFleet(e.target.value)
+  selectedFleetId.value = e.target.value
+}
+
+function onFlightChange(e) {
+  selectedFlightId.value = e.target.value
 }
 </script>
 
@@ -333,7 +311,7 @@ function onFleetChange(e) {
   font-weight: 700;
   appearance: none;
   cursor: pointer;
-  background-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 20 20'%3E%3Cpath fill='%2364756b' d='M5.3 7.3a1 1 0 0 1 1.4 0L10 10.6l3.3-3.3a1 1 0 1 1 1.4 1.4l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 0 1 0-1.4Z'/%3E%3C/svg%3E\");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 20 20'%3E%3Cpath fill='%2364756b' d='M5.3 7.3a1 1 0 0 1 1.4 0L10 10.6l3.3-3.3a1 1 0 1 1 1.4 1.4l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 0 1 0-1.4Z'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 14px center;
 }
@@ -410,10 +388,14 @@ function onFleetChange(e) {
   font-family: inherit;
 }
 
-.aircraft-card:hover {
+.aircraft-card.selected {
   border-color: #1e40af;
   background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%);
-  box-shadow: 0 4px 16px rgba(30, 64, 175, 0.2);
+}
+
+.aircraft-card:hover {
+  border-color: #1e40af;
+  box-shadow: 0 4px 16px rgba(30, 64, 175, 0.15);
   transform: translateY(-2px);
 }
 
@@ -422,7 +404,6 @@ function onFleetChange(e) {
   font-weight: 800;
   color: #0f172a;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.02em;
 }
 
 .aircraft-name {
@@ -431,27 +412,11 @@ function onFleetChange(e) {
   font-weight: 600;
 }
 
-.aircraft-fault-tag {
-  margin-top: 4px;
-  padding: 4px 8px;
-  font-size: 0.6875rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: #b91c1c;
-  background: #fef2f2;
-  border-radius: 6px;
-  align-self: flex-start;
-}
-
-.aircraft-ok-tag {
-  margin-top: 4px;
-  font-size: 0.6875rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: #15803d;
-  align-self: flex-start;
+.aircraft-hint {
+  margin-top: 8px;
+  font-size: 0.75rem;
+  color: #64748b;
+  font-weight: 600;
 }
 
 .aircraft-cta {
@@ -459,10 +424,26 @@ function onFleetChange(e) {
   font-size: 0.8125rem;
   font-weight: 700;
   color: #1e40af;
-  align-self: flex-start;
 }
 
-.aircraft-card:hover .aircraft-cta {
-  text-decoration: underline;
+.open-bar {
+  max-width: 900px;
+  margin: 20px auto 0;
+  text-align: center;
+}
+
+.open-btn {
+  padding: 12px 24px;
+  border: none;
+  border-radius: 10px;
+  background: #1e40af;
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.9375rem;
+  cursor: pointer;
+}
+
+.open-btn:hover {
+  background: #1e3a8a;
 }
 </style>

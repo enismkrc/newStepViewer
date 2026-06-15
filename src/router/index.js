@@ -8,7 +8,7 @@ const routes = [
     meta: { title: 'Aircraft Selection' }
   },
   {
-    path: '/view/:aircraftId',
+    path: '/view/:aircraftId/:flightId',
     name: 'View',
     component: () => import('../views/HmsViewerPage.vue'),
     meta: { title: 'Model View' }

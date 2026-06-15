@@ -51,7 +51,7 @@
           <div class="fault-label-line"></div>
           <div class="fault-label-box">
             <div class="fault-card-row fault-card-fin">FIN# {{ activeFaultLabel.card.fin }}</div>
-            <div class="fault-card-row"><span class="fault-card-label">LRU:</span> {{ activeFaultLabel.card.lruName }}</div>
+            <div class="fault-card-row"><span class="fault-card-label">Part:</span> {{ activeFaultLabel.card.lruName }}</div>
             <div class="fault-card-row"><span class="fault-card-label">MFL Id:</span> {{ activeFaultLabel.card.mflId }}</div>
             <div class="fault-card-row fault-card-desc"><span class="fault-card-label">Description:</span> {{ activeFaultLabel.card.description }}</div>
           </div>
@@ -85,9 +85,9 @@
         <dl v-if="activeFaultSummary" class="part-detail-list">
           <dt>FIN</dt>
           <dd>{{ activeFaultSummary.fin }}</dd>
-          <dt>LRU Name</dt>
+          <dt>Part</dt>
           <dd>{{ activeFaultSummary.lruName }}</dd>
-          <dt>MFL Id</dt>
+          <dt>Fault Code</dt>
           <dd>{{ activeFaultSummary.mflId }}</dd>
           <dt>Description</dt>
           <dd>{{ activeFaultSummary.description }}</dd>
@@ -117,6 +117,8 @@
               <dd>{{ m.MFL_Absulut_time }}</dd>
               <dt>Relative Time</dt>
               <dd>{{ m.MFL_Relative_Time }}</dd>
+              <dt>Category</dt>
+              <dd>{{ m.Category || '—' }}</dd>
               <dt>Fault Code</dt>
               <dd>{{ m.Fault_Code }}</dd>
               <dt>Severity</dt>
@@ -279,13 +281,13 @@ function statusClass(status) {
  */
 function makeFaultCard(part, type, override = {}) {
   if (!part) return null
-  const mflRecords = props.mflList.filter((r) => r.part === part)
+  const mflRecords = props.mflList.filter((r) => r.part === part || r.finNumber === part)
   const primaryMfl = mflRecords[0] ?? null
   return {
-    fin: override.fin ?? '-----',
+    fin: override.fin ?? part,
     lruName: part,
-    mflId: primaryMfl?.MFL_Id ?? '—',
-    description: primaryMfl?.Description ?? primaryMfl?.MFL_Description ?? override.warningFaults ?? '—'
+    mflId: primaryMfl?.Fault_Code ?? primaryMfl?.MFL_Id ?? '—',
+    description: primaryMfl?.Description ?? override.warningFaults ?? '—'
   }
 }
 
