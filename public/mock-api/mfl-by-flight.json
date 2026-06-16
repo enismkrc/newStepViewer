@@ -1,4 +1,36 @@
 {
+  "_comment": "GEÇİCİ MOCK MFL. Gerçek backend flightId'leri buradaki anahtarlarla eşleşmezse 'default' kullanılır. finNumber = 3D modeldeki parça (node) adı ile birebir eşleşmeli.",
+  "default": {
+    "mflDataList": [
+      {
+        "finNumber": "Left engine",
+        "absoluteTime": "2026-06-10T14:32:18Z",
+        "relativeTime": "T+00:12:45",
+        "faultCode": "72-001",
+        "severity": "FAULT",
+        "category": "PROPULSION",
+        "description": "TET above limit for 8 consecutive seconds. N2 vibration secondary alert active."
+      },
+      {
+        "finNumber": "Landing gear",
+        "absoluteTime": "2026-06-10T13:05:02Z",
+        "relativeTime": "T+00:00:00",
+        "faultCode": "32-021",
+        "severity": "FAULT",
+        "category": "LANDING_GEAR",
+        "description": "WOW sensor reading inconsistent with gear position."
+      },
+      {
+        "finNumber": "R_Rudder",
+        "absoluteTime": "2026-06-10T14:10:00Z",
+        "relativeTime": "T+00:08:12",
+        "faultCode": "27-041",
+        "severity": "FAULT",
+        "category": "FLIGHT_CONTROLS",
+        "description": "Rudder actuator feedback drift detected."
+      }
+    ]
+  },
   "flight-101": {
     "mflDataList": [
       {

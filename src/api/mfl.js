@@ -10,6 +10,11 @@
  * }
  *
  * finNumber = 3D model part / glTF node name for highlight matching.
+ *
+ * !!! GEÇİCİ: Backend `finNumber`'ı boş döndürdüğü için MFL verisi HER ZAMAN
+ * mock'tan (public/mock-api/mfl-by-flight.json) okunur. (forceMock=true)
+ * Filo/uçak/uçuş listeleri gerçek backend'den gelir; sadece MFL mock'tur.
+ * Backend MFL'i düzgün döndürmeye başlayınca `forceMock`'u kaldırın.
  */
 
 import { fetchJson } from './client.js'
@@ -17,7 +22,12 @@ import { fetchJson } from './client.js'
 const MOCK_MFL_BY_FLIGHT = '/mock-api/mfl-by-flight.json'
 
 /**
- * MFL records for a flight.
+ * MFL records for a flight (always read from mock for now).
+ *
+ * Gerçek backend `flightId`'leri mock anahtarlarıyla eşleşmez. Bu yüzden:
+ *   1) flightId tam eşleşirse o uçuşun verisi,
+ *   2) yoksa "default" anahtarı,
+ *   3) o da yoksa ilk uçuşun verisi kullanılır.
  * @param {string} flightId
  * @returns {Promise<Array>}
  */
@@ -25,10 +35,23 @@ export async function getFilteredMflData(flightId) {
   if (!flightId) return []
   const data = await fetchJson(
     MOCK_MFL_BY_FLIGHT,
-    `/api/mfl/get-filtered-mfl-data/${encodeURIComponent(flightId)}`
+    `/api/mfl/get-filtered-mfl-data/${encodeURIComponent(flightId)}`,
+    { forceMock: true }
   )
   if (Array.isArray(data)) return data
-  const list = data.mflDataList ?? data[flightId]?.mflDataList ?? data[flightId]
+
+  const pickList = (entry) => entry?.mflDataList ?? (Array.isArray(entry) ? entry : null)
+
+  // 1) Tam eşleşme  2) backend tarzı tekil nesne  3) "default"  4) ilk uçuş
+  let list =
+    pickList(data[flightId]) ??
+    pickList(data) ??
+    pickList(data.default)
+
+  if (!list) {
+    const firstKey = Object.keys(data).find((k) => k !== '_comment' && k !== 'default')
+    list = pickList(data[firstKey])
+  }
   return Array.isArray(list) ? list : []
 }
 

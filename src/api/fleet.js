@@ -5,9 +5,14 @@
  *   GET /api/fleet/find-all?page=0&size=20  -> Page<Fleet>
  *   GET /api/aircraft/find-by-fleet-id/{fleetId}  -> Aircraft[]
  *   GET /api/aircraft/{aircraftId}  -> Aircraft (optional single lookup)
+ *
+ * NOT: Backend `modelUrl` / `viewConfig` döndürmüyor. Bu alanlar `attachModel` ile
+ * src/config/modelRegistry.js üzerinden MANUEL ekleniyor. Backend ileride bu alanları
+ * döndürürse backend değeri korunur.
  */
 
 import { fetchJson } from './client.js'
+import { attachModel } from '../config/modelRegistry.js'
 
 const MOCK_FLEETS = '/mock-api/fleets-page.json'
 const MOCK_AIRCRAFT_BY_FLEET = '/mock-api/aircraft-by-fleet.json'
@@ -42,8 +47,8 @@ export async function findAircraftByFleetId(fleetId) {
     MOCK_AIRCRAFT_BY_FLEET,
     `/api/aircraft/find-by-fleet-id/${encodeURIComponent(fleetId)}`
   )
-  if (Array.isArray(data)) return data
-  return data[fleetId] ?? []
+  const list = Array.isArray(data) ? data : (data[fleetId] ?? [])
+  return list.map(attachModel)
 }
 
 /**
@@ -57,12 +62,15 @@ export async function getAircraftById(aircraftId) {
     MOCK_AIRCRAFT_BY_FLEET,
     `/api/aircraft/${encodeURIComponent(aircraftId)}`
   )
-  if (data && !Array.isArray(data) && data.id === aircraftId) return data
-  if (Array.isArray(data)) return data.find((a) => a.id === aircraftId) ?? null
+  if (data && !Array.isArray(data) && data.id === aircraftId) return attachModel(data)
+  if (Array.isArray(data)) {
+    const found = data.find((a) => a.id === aircraftId)
+    return found ? attachModel(found) : null
+  }
   for (const list of Object.values(data)) {
     if (!Array.isArray(list)) continue
     const found = list.find((a) => a.id === aircraftId)
-    if (found) return found
+    if (found) return attachModel(found)
   }
   return null
 }
