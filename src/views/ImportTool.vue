@@ -30,13 +30,13 @@ import GlbUploadViewer from '../components/GlbUploadViewer.vue'
   margin: 0 0 8px 0;
   font-size: 20px;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--text-strong);
 }
 
 .import-desc {
   margin: 0;
   font-size: 14px;
-  color: #475569;
+  color: var(--text-muted);
   line-height: 1.5;
 }
 

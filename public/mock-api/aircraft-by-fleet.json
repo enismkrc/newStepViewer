@@ -20,12 +20,20 @@
       "aircraftModel": "KF-21",
       "name": "KF-21 Boramae 03",
       "tailNumber": "KF-21-03"
-    },
+    }
+  ],
+  "fleet-3": [
     {
       "id": "aircraft-5",
       "aircraftModel": "KF-21",
       "name": "KF-21 Boramae 05",
       "tailNumber": "KF-21-05"
+    },
+    {
+      "id": "aircraft-6",
+      "aircraftModel": "KF-21",
+      "name": "KF-21 Boramae 06",
+      "tailNumber": "KF-21-06"
     }
   ]
 }

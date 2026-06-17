@@ -17,8 +17,8 @@
       <div class="viewer-wrap">
         <HmsViewer
           :key="`${aircraft.id}-${flightId}`"
-          :model-url="aircraft.modelUrl"
-          :view-config="aircraft.viewConfig"
+          :model-url="model.modelUrl"
+          :view-config="model.viewConfig"
           :faults="faults"
           :mfl-list="mflList"
           :lru-list="[]"
@@ -34,6 +34,7 @@ import { useRoute } from 'vue-router'
 import { getAircraftById } from '../api/fleet'
 import { findFlightsByAircraftId } from '../api/flight'
 import { getFilteredMflData, mflListToFaults, flattenMflForViewer } from '../api/mfl'
+import { resolveModel } from '../config/modelRegistry'
 import HmsViewer from '../components/HmsViewer.vue'
 
 const route = useRoute()
@@ -46,6 +47,21 @@ const loading = ref(true)
 const loadError = ref('')
 
 const flightId = computed(() => route.params.flightId)
+
+/**
+ * MANUEL MODEL: Model URL'i backend'den BEKLEMEYİZ. src/config/modelRegistry.js
+ * üzerinden uçağın aircraftModel/id değerine göre çözülür. (Backend ileride modelUrl
+ * döndürürse o önceliklidir.)
+ */
+const model = computed(() => {
+  const ac = aircraft.value
+  if (!ac) return { modelUrl: '', viewConfig: null }
+  const resolved = resolveModel(ac)
+  return {
+    modelUrl: ac.modelUrl || resolved.modelUrl,
+    viewConfig: ac.viewConfig || resolved.viewConfig
+  }
+})
 
 async function loadViewerData(aircraftId, fId) {
   loading.value = true
@@ -100,11 +116,11 @@ watch(
 .viewer-error {
   padding: 48px 24px;
   text-align: center;
-  color: #64748b;
+  color: var(--text-muted);
 }
 
 .viewer-error {
-  color: #b91c1c;
+  color: var(--danger-text);
 }
 
 .viewer-header {
@@ -118,7 +134,7 @@ watch(
 .back-link {
   font-size: 0.875rem;
   font-weight: 700;
-  color: #1e40af;
+  color: var(--accent-text);
   text-decoration: none;
 }
 
@@ -129,7 +145,7 @@ watch(
 .viewer-label {
   font-size: 0.875rem;
   font-weight: 700;
-  color: #475569;
+  color: var(--text-muted);
 }
 
 .viewer-wrap {

@@ -1,12 +1,16 @@
 {
-  "content": [
-    { "id": "fleet-1", "name": "Test Fleet" },
-    { "id": "fleet-2", "name": "Operational Fleet" }
-  ],
-  "totalElements": 2,
-  "totalPages": 1,
-  "number": 0,
-  "size": 20,
-  "first": true,
-  "last": true
+  "success": true,
+  "data": {
+    "content": [
+      { "id": "fleet-1", "name": "Test Fleet", "base": "Ankara", "country": "TURKEY" },
+      { "id": "fleet-2", "name": "Training Fleet", "base": "Ankara", "country": "TURKEY" },
+      { "id": "fleet-3", "name": "Operational Fleet", "base": "Konya", "country": "TURKEY" }
+    ],
+    "totalElements": 3,
+    "totalPages": 1,
+    "number": 0,
+    "size": 20,
+    "first": true,
+    "last": true
+  }
 }

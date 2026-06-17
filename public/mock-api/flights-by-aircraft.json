@@ -11,5 +11,8 @@
   ],
   "aircraft-5": [
     { "id": "flight-501", "flightNo": "KF21-701" }
+  ],
+  "aircraft-6": [
+    { "id": "flight-601", "flightNo": "KF21-801" }
   ]
 }

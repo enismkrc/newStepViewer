@@ -16,10 +16,12 @@ const MOCK_FLIGHTS = '/mock-api/flights-by-aircraft.json'
  */
 export async function findFlightsByAircraftId(aircraftId) {
   if (!aircraftId) return []
-  const data = await fetchJson(
+  const raw = await fetchJson(
     MOCK_FLIGHTS,
     `/api/flight/find-by-aircraft-id/${encodeURIComponent(aircraftId)}`
   )
+  // Backend zarfı ({ success, data }) ve mock map şekli ({ "aircraft-id": [...] }) desteklenir.
+  const data = raw?.data ?? raw
   if (Array.isArray(data)) return data
   return data[aircraftId] ?? []
 }

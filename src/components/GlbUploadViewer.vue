@@ -134,6 +134,11 @@ import { ViewportGizmo } from 'three-viewport-gizmo'
 import { createViewportGizmo } from '../three/viewportGizmoConfig.js'
 import '../three/viewportGizmo.css'
 import { DEFAULT_VIEW, frameCameraOnBox } from '../three/defaultView.js'
+import { useTheme } from '../composables/useTheme.js'
+
+// 3D sahne arka planı temaya göre değişir.
+const { theme } = useTheme()
+const SCENE_BG = { dark: 0x0b1220, light: 0xf3f4f6 }
 
 const canvasEl = ref(null)
 const statusText = ref('Select a GLB / glTF file to load.')
@@ -265,6 +270,11 @@ watch(faultyPartName, () => {
 })
 watch(transparentOthers, () => updateFaultyHighlight())
 
+// Tema değişince 3D sahne arka planını güncelle.
+watch(theme, (t) => {
+  if (scene) scene.background = new THREE.Color(SCENE_BG[t] ?? SCENE_BG.dark)
+})
+
 watch([isIsolated, partDetailPanelOpen], () => {
   setTimeout(onResize, 80)
 })
@@ -301,7 +311,7 @@ function initThree() {
   if (!canvas) return
 
   scene = new THREE.Scene()
-  scene.background = new THREE.Color(0xf3f4f6)
+  scene.background = new THREE.Color(SCENE_BG[theme.value] ?? SCENE_BG.dark)
 
   camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100000)
   camera.position.set(10, 8, 10)
@@ -858,12 +868,12 @@ onBeforeUnmount(() => {
 .title {
   font-size: 22px;
   font-weight: 800;
-  color: #2c3e50;
+  color: var(--text-strong);
 }
 
 .subtitle {
   margin-top: 4px;
-  color: #6b7280;
+  color: var(--text-muted);
 }
 
 .controls {
@@ -894,38 +904,43 @@ onBeforeUnmount(() => {
 .btn {
   padding: 10px 14px;
   border-radius: 10px;
-  border: 1px solid #dbe2ff;
-  background: white;
+  border: 1px solid var(--border-strong);
+  background: var(--panel-3);
+  color: var(--text);
   cursor: pointer;
   font-weight: 700;
 }
 
+.btn:hover:not(:disabled) {
+  background: var(--border-strong);
+}
+
 .btn:disabled {
-  opacity: 0.55;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
 .btn.active {
-  background: #1e40af;
+  background: var(--accent);
   color: white;
-  border-color: #1e40af;
+  border-color: var(--accent);
 }
 
 .btn-back {
-  background: #1e40af;
+  background: var(--accent);
   color: white;
-  border-color: #1e40af;
+  border-color: var(--accent);
 }
 
 .btn-panel-toggle {
-  background: #f1f5f9;
-  color: #475569;
-  border-color: #cbd5e1;
+  background: var(--panel-3);
+  color: var(--text-muted);
+  border-color: var(--border-strong);
 }
 .btn-panel-toggle.active {
-  background: #1e40af;
+  background: var(--accent);
   color: white;
-  border-color: #1e40af;
+  border-color: var(--accent);
 }
 
 .fault-row {
@@ -937,7 +952,7 @@ onBeforeUnmount(() => {
 
 .fault-label {
   font-weight: 700;
-  color: #374151;
+  color: var(--text);
 }
 
 .fault-select {
@@ -945,10 +960,15 @@ onBeforeUnmount(() => {
   max-width: 100%;
   padding: 8px 12px;
   border-radius: 8px;
-  border: 1px solid #d1d5db;
-  background: white;
+  border: 1px solid var(--border-strong);
+  background: var(--input-bg);
   font-size: 14px;
-  color: #111827;
+  color: var(--text);
+}
+
+.fault-select option {
+  background: var(--input-bg);
+  color: var(--text);
 }
 
 .fault-check {
@@ -957,7 +977,7 @@ onBeforeUnmount(() => {
   gap: 8px;
   cursor: pointer;
   font-size: 14px;
-  color: #374151;
+  color: var(--text);
   user-select: none;
 }
 
@@ -970,24 +990,24 @@ onBeforeUnmount(() => {
 .status {
   padding: 12px 14px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.6);
+  background: var(--panel);
+  border: 1px solid var(--border);
 }
 
 .statusText {
-  color: #111827;
+  color: var(--text);
   font-weight: 700;
 }
 
 .errorText {
   margin-top: 6px;
-  color: #b91c1c;
+  color: var(--danger-text);
   font-weight: 700;
 }
 
 .fileName {
   margin-top: 6px;
-  color: #6b7280;
+  color: var(--text-muted);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
 }
 
@@ -999,7 +1019,7 @@ onBeforeUnmount(() => {
   height: min(72vh, 720px);
   overflow: hidden;
   border-radius: 14px;
-  border: 1px solid rgba(17, 24, 39, 0.12);
+  border: 1px solid var(--border);
 }
 
 .stage-wrapper-split {
@@ -1013,7 +1033,7 @@ onBeforeUnmount(() => {
   min-height: 0;
   border-radius: 0;
   border: none;
-  border-right: 1px solid rgba(17, 24, 39, 0.1);
+  border-right: 1px solid var(--border);
 }
 
 .stage-wrapper-split .part-detail-panel {
@@ -1028,7 +1048,7 @@ onBeforeUnmount(() => {
   width: 340px;
   max-width: 100%;
   padding: 20px 18px;
-  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  background: var(--panel);
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -1047,7 +1067,7 @@ onBeforeUnmount(() => {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #64748b;
+  color: var(--text-subtle);
 }
 
 .part-detail-close {
@@ -1057,8 +1077,8 @@ onBeforeUnmount(() => {
   padding: 0;
   border: none;
   border-radius: 6px;
-  background: #e2e8f0;
-  color: #64748b;
+  background: var(--panel-3);
+  color: var(--text-muted);
   font-size: 20px;
   line-height: 1;
   cursor: pointer;
@@ -1067,17 +1087,17 @@ onBeforeUnmount(() => {
   justify-content: center;
 }
 .part-detail-close:hover {
-  background: #cbd5e1;
-  color: #334155;
+  background: var(--border-strong);
+  color: var(--text);
 }
 
 .part-detail-heading {
   font-size: 18px;
   font-weight: 800;
-  color: #0f172a;
+  color: var(--text-strong);
   margin-bottom: 16px;
   padding-bottom: 12px;
-  border-bottom: 2px solid #1e40af;
+  border-bottom: 2px solid var(--accent);
 }
 
 .part-detail-list {
@@ -1092,7 +1112,7 @@ onBeforeUnmount(() => {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #64748b;
+  color: var(--text-subtle);
   margin: 0 0 2px 0;
 }
 
@@ -1100,7 +1120,7 @@ onBeforeUnmount(() => {
   margin: 0 0 4px 0;
   font-size: 13px;
   line-height: 1.5;
-  color: #334155;
+  color: var(--text);
 }
 
 .part-detail-list dd:last-of-type {
@@ -1112,7 +1132,7 @@ onBeforeUnmount(() => {
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  background: radial-gradient(1200px 600px at 50% 60%, rgba(59, 130, 246, 0.12), rgba(255, 255, 255, 0.6));
+  background: radial-gradient(1200px 600px at 50% 60%, var(--stage-glow), var(--stage-edge));
 }
 
 .stage-wrapper:not(.stage-wrapper-split) .stage {
@@ -1145,12 +1165,12 @@ onBeforeUnmount(() => {
   min-width: 200px;
   max-width: 320px;
   padding: 12px 16px;
-  background: #fff;
-  border: 1px solid #b91c1c;
+  background: var(--overlay-card-bg);
+  border: 1px solid var(--danger);
   border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(185, 28, 28, 0.2);
+  box-shadow: 0 4px 16px var(--shadow);
   font-size: 12px;
-  color: #111827;
+  color: var(--overlay-card-text);
   line-height: 1.45;
   font-family: 'Segoe UI', system-ui, sans-serif;
 }
@@ -1176,15 +1196,15 @@ onBeforeUnmount(() => {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
-  color: #7f1d1d;
-  border-bottom: 1px solid rgba(185, 28, 28, 0.25);
+  color: var(--danger-text);
+  border-bottom: 1px solid var(--danger-border);
   padding-bottom: 6px;
   margin-bottom: 8px;
 }
 
 .fault-card-label {
   font-weight: 600;
-  color: #374151;
+  color: var(--text-muted);
   margin-right: 4px;
 }
 
@@ -1198,10 +1218,10 @@ onBeforeUnmount(() => {
   white-space: normal;
   word-break: break-word;
   font-size: 11px;
-  color: #4b5563;
+  color: var(--text);
   margin-top: 6px;
   padding-top: 6px;
-  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  border-top: 1px solid var(--border);
 }
 .fault-card-warnings .fault-card-label {
   display: block;
@@ -1223,10 +1243,10 @@ onBeforeUnmount(() => {
   max-height: calc(100% - 24px);
   display: flex;
   flex-direction: column;
-  background: rgba(255, 255, 255, 0.97);
-  border: 1px solid rgba(17, 24, 39, 0.15);
+  background: var(--panel);
+  border: 1px solid var(--border);
   border-radius: 10px;
-  box-shadow: 0 6px 20px rgba(17, 24, 39, 0.15);
+  box-shadow: 0 6px 20px var(--shadow);
   overflow: hidden;
 }
 
@@ -1235,8 +1255,8 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   padding: 8px 10px;
-  border-bottom: 1px solid rgba(17, 24, 39, 0.1);
-  background: #f8fafc;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel-2);
 }
 
 .tree-panel-title {
@@ -1244,7 +1264,7 @@ onBeforeUnmount(() => {
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #475569;
+  color: var(--text-muted);
 }
 
 .tree-panel-actions {
@@ -1256,16 +1276,16 @@ onBeforeUnmount(() => {
   width: 22px;
   height: 22px;
   padding: 0;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
-  background: white;
-  color: #475569;
+  background: var(--panel-3);
+  color: var(--text);
   font-size: 14px;
   line-height: 1;
   cursor: pointer;
 }
 .tree-mini-btn:hover {
-  background: #e2e8f0;
+  background: var(--border-strong);
 }
 
 .tree-list {
@@ -1280,13 +1300,13 @@ onBeforeUnmount(() => {
   padding-right: 6px;
   min-height: 26px;
   font-size: 13px;
-  color: #1f2937;
+  color: var(--text);
 }
 .tree-row.selected {
-  background: rgba(220, 38, 38, 0.12);
+  background: var(--danger-soft);
 }
 .tree-row.selected .tree-name {
-  color: #b91c1c;
+  color: var(--danger-text);
   font-weight: 700;
 }
 
@@ -1297,7 +1317,7 @@ onBeforeUnmount(() => {
   padding: 0;
   border: none;
   background: transparent;
-  color: #64748b;
+  color: var(--text-muted);
   font-size: 11px;
   line-height: 1;
   cursor: pointer;

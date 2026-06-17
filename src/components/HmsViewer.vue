@@ -143,6 +143,11 @@ import { ViewportGizmo } from 'three-viewport-gizmo'
 import { createViewportGizmo } from '../three/viewportGizmoConfig.js'
 import '../three/viewportGizmo.css'
 import { mergeViewConfig, applyModelOrientation, frameCameraOnBox } from '../three/defaultView.js'
+import { useTheme } from '../composables/useTheme.js'
+
+// 3D sahne arka planı temaya göre değişir.
+const { theme } = useTheme()
+const SCENE_BG = { dark: 0x0b1220, light: 0xf3f4f6 }
 
 /**
  * HMS (Health Management System) viewer (Three.js)
@@ -320,6 +325,11 @@ watch(activeFaultNames, () => {
 })
 watch(transparentOthers, () => updateFaultyHighlight())
 
+// Tema değişince 3D sahne arka planını güncelle.
+watch(theme, (t) => {
+  if (scene) scene.background = new THREE.Color(SCENE_BG[t] ?? SCENE_BG.dark)
+})
+
 watch([isIsolated, partDetailPanelOpen], () => {
   setTimeout(onResize, 80)
 })
@@ -381,7 +391,7 @@ function initThree() {
   if (!canvas) return
 
   scene = new THREE.Scene()
-  scene.background = new THREE.Color(0xf3f4f6)
+  scene.background = new THREE.Color(SCENE_BG[theme.value] ?? SCENE_BG.dark)
 
   camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100000)
   camera.position.set(10, 8, 10)
@@ -835,20 +845,46 @@ function meshMatchesPart(mesh, name) {
 }
 
 /**
- * Bake a mesh's world transform into a fresh position+normal-only geometry, so all
- * geometries of one part can be merged (mergeGeometries needs matching attributes).
+ * Bake a mesh's world transform into a fresh position(+normal+index)-only geometry, so
+ * all geometries of one part can be merged (mergeGeometries needs matching attributes).
+ *
+ * BELLEK NOTU: Burada bilerek `toNonIndexed()` KULLANMIYORUZ. De-index etmek paylaşılan
+ * vertex'leri çoğaltıp vertex sayısını birkaç katına çıkarır ve büyük CAD modellerinde
+ * RAM'i patlatır (sekme çöker). Index korunur; sadece position/normal/index kopyalanır
+ * (uv, color, tangent gibi gereksiz attribute'lar atılır).
  */
 function bakeGeometry(mesh) {
   const src = mesh.geometry
   if (!src) return null
-  const g = src.index ? src.toNonIndexed() : src.clone()
-  g.applyMatrix4(mesh.matrixWorld)
+  const pos = src.getAttribute('position')
+  if (!pos) return null
   const out = new THREE.BufferGeometry()
-  out.setAttribute('position', g.getAttribute('position'))
-  if (g.getAttribute('normal')) out.setAttribute('normal', g.getAttribute('normal'))
-  else out.computeVertexNormals()
-  if (g !== src) g.dispose()
+  out.setAttribute('position', pos.clone())
+  const normal = src.getAttribute('normal')
+  if (normal) out.setAttribute('normal', normal.clone())
+  if (src.index) out.setIndex(src.index.clone())
+  out.applyMatrix4(mesh.matrixWorld) // position + normal'ı world uzayına taşır
+  if (!normal) out.computeVertexNormals()
   return out
+}
+
+/**
+ * Bir parçaya ait geometrileri mergeGeometries için uyumlu hale getirir.
+ * mergeGeometries tüm girdilerin AYNI index durumunda (hepsi indexed ya da hepsi
+ * non-indexed) olmasını ister. Karışıksa (nadir) hepsini de-index ederiz; bu sadece
+ * o parça için geçerli olduğundan genel bellek kazancı korunur.
+ */
+function normalizePartGeoms(geoms) {
+  const anyIndexed = geoms.some((g) => g.index)
+  const allIndexed = geoms.every((g) => g.index)
+  if (anyIndexed && !allIndexed) {
+    return geoms.map((g) => {
+      const ng = g.toNonIndexed()
+      if (ng !== g) g.dispose()
+      return ng
+    })
+  }
+  return geoms
 }
 
 /**
@@ -883,7 +919,8 @@ function renderGltf(gltf) {
   })
 
   for (const partName of order) {
-    const geoms = partGeoms.get(partName)
+    let geoms = partGeoms.get(partName)
+    if (geoms.length > 1) geoms = normalizePartGeoms(geoms)
     const merged = geoms.length === 1 ? geoms[0] : mergeGeometries(geoms, false)
     if (!merged) continue
     geoms.forEach((g) => { if (g !== merged) g.dispose() })
@@ -980,7 +1017,7 @@ onBeforeUnmount(() => {
 .title {
   font-size: 22px;
   font-weight: 800;
-  color: #2c3e50;
+  color: var(--text-strong);
 }
 
 .controls {
@@ -993,49 +1030,54 @@ onBeforeUnmount(() => {
 .btn {
   padding: 10px 14px;
   border-radius: 10px;
-  border: 1px solid #dbe2ff;
-  background: white;
+  border: 1px solid var(--border-strong);
+  background: var(--panel-3);
+  color: var(--text);
   cursor: pointer;
   font-weight: 700;
 }
 
+.btn:hover:not(:disabled) {
+  background: var(--border-strong);
+}
+
 .btn:disabled {
-  opacity: 0.55;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
 .btn-back {
-  background: #1e40af;
+  background: var(--accent);
   color: white;
-  border-color: #1e40af;
+  border-color: var(--accent);
 }
 
 .btn-panel-toggle {
-  background: #f1f5f9;
-  color: #475569;
-  border-color: #cbd5e1;
+  background: var(--panel-3);
+  color: var(--text-muted);
+  border-color: var(--border-strong);
 }
 .btn-panel-toggle.active {
-  background: #1e40af;
+  background: var(--accent);
   color: white;
-  border-color: #1e40af;
+  border-color: var(--accent);
 }
 
 .status {
   padding: 12px 14px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.6);
+  background: var(--panel);
+  border: 1px solid var(--border);
 }
 
 .statusText {
-  color: #111827;
+  color: var(--text);
   font-weight: 700;
 }
 
 .errorText {
   margin-top: 6px;
-  color: #b91c1c;
+  color: var(--danger-text);
   font-weight: 700;
 }
 
@@ -1047,7 +1089,7 @@ onBeforeUnmount(() => {
   height: min(72vh, 720px);
   overflow: hidden;
   border-radius: 14px;
-  border: 1px solid rgba(17, 24, 39, 0.12);
+  border: 1px solid var(--border);
 }
 
 .stage-wrapper-split {
@@ -1061,7 +1103,7 @@ onBeforeUnmount(() => {
   min-height: 0;
   border-radius: 0;
   border: none;
-  border-right: 1px solid rgba(17, 24, 39, 0.1);
+  border-right: 1px solid var(--border);
 }
 
 .stage-wrapper-split .part-detail-panel {
@@ -1076,7 +1118,7 @@ onBeforeUnmount(() => {
   width: 340px;
   max-width: 100%;
   padding: 20px 18px;
-  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  background: var(--panel);
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -1095,7 +1137,7 @@ onBeforeUnmount(() => {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #64748b;
+  color: var(--text-subtle);
 }
 
 .part-detail-close {
@@ -1105,8 +1147,8 @@ onBeforeUnmount(() => {
   padding: 0;
   border: none;
   border-radius: 6px;
-  background: #e2e8f0;
-  color: #64748b;
+  background: var(--panel-3);
+  color: var(--text-muted);
   font-size: 20px;
   line-height: 1;
   cursor: pointer;
@@ -1115,17 +1157,17 @@ onBeforeUnmount(() => {
   justify-content: center;
 }
 .part-detail-close:hover {
-  background: #cbd5e1;
-  color: #334155;
+  background: var(--border-strong);
+  color: var(--text);
 }
 
 .part-detail-heading {
   font-size: 18px;
   font-weight: 800;
-  color: #0f172a;
+  color: var(--text-strong);
   margin-bottom: 16px;
   padding-bottom: 12px;
-  border-bottom: 2px solid #1e40af;
+  border-bottom: 2px solid var(--accent);
 }
 
 .part-detail-list {
@@ -1140,7 +1182,7 @@ onBeforeUnmount(() => {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #64748b;
+  color: var(--text-subtle);
   margin: 0 0 2px 0;
 }
 
@@ -1148,7 +1190,7 @@ onBeforeUnmount(() => {
   margin: 0 0 4px 0;
   font-size: 13px;
   line-height: 1.5;
-  color: #334155;
+  color: var(--text);
 }
 
 .part-detail-list dd:last-of-type {
@@ -1158,7 +1200,7 @@ onBeforeUnmount(() => {
 .detail-section {
   margin-top: 20px;
   padding-top: 16px;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid var(--border);
 }
 
 .detail-section-title {
@@ -1167,14 +1209,14 @@ onBeforeUnmount(() => {
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #475569;
+  color: var(--text-muted);
 }
 
 .mfl-block {
   padding: 12px;
   margin-bottom: 10px;
-  background: #fff;
-  border: 1px solid #e2e8f0;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
   border-radius: 8px;
 }
 
@@ -1206,7 +1248,7 @@ onBeforeUnmount(() => {
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  background: radial-gradient(1200px 600px at 50% 60%, rgba(59, 130, 246, 0.12), rgba(255, 255, 255, 0.6));
+  background: radial-gradient(1200px 600px at 50% 60%, var(--stage-glow), var(--stage-edge));
 }
 
 .stage-wrapper:not(.stage-wrapper-split) .stage {
@@ -1261,10 +1303,10 @@ onBeforeUnmount(() => {
   max-height: calc(100% - 24px);
   display: flex;
   flex-direction: column;
-  background: rgba(255, 255, 255, 0.96);
-  border: 1px solid rgba(17, 24, 39, 0.12);
+  background: var(--panel);
+  border: 1px solid var(--border);
   border-radius: 10px;
-  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.12);
+  box-shadow: 0 6px 20px var(--shadow);
   overflow: hidden;
   z-index: 9;
 }
@@ -1275,9 +1317,9 @@ onBeforeUnmount(() => {
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #b91c1c;
-  background: #fef2f2;
-  border-bottom: 1px solid rgba(185, 28, 28, 0.18);
+  color: var(--danger-text);
+  background: var(--danger-soft);
+  border-bottom: 1px solid var(--danger-border);
 }
 
 .fault-list {
@@ -1299,11 +1341,11 @@ onBeforeUnmount(() => {
 
 .fault-list-item:hover,
 .fault-list-item.active {
-  background: #fef2f2;
+  background: var(--danger-soft);
 }
 
 .fault-list-item.active {
-  box-shadow: inset 0 0 0 1px rgba(185, 28, 28, 0.4);
+  box-shadow: inset 0 0 0 1px var(--danger-border);
 }
 
 .fault-list-num {
@@ -1325,7 +1367,7 @@ onBeforeUnmount(() => {
   min-width: 0;
   font-size: 12px;
   font-weight: 600;
-  color: #1f2937;
+  color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1336,7 +1378,7 @@ onBeforeUnmount(() => {
   font-size: 10px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  color: #64748b;
+  color: var(--text-muted);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
@@ -1378,12 +1420,12 @@ onBeforeUnmount(() => {
   min-width: 200px;
   max-width: 320px;
   padding: 12px 16px;
-  background: #fff;
-  border: 1px solid #b91c1c;
+  background: var(--overlay-card-bg);
+  border: 1px solid var(--danger);
   border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(185, 28, 28, 0.2);
+  box-shadow: 0 4px 16px var(--shadow);
   font-size: 12px;
-  color: #111827;
+  color: var(--overlay-card-text);
   line-height: 1.45;
   font-family: 'Segoe UI', system-ui, sans-serif;
 }
@@ -1409,15 +1451,15 @@ onBeforeUnmount(() => {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
-  color: #7f1d1d;
-  border-bottom: 1px solid rgba(185, 28, 28, 0.25);
+  color: var(--danger-text);
+  border-bottom: 1px solid var(--danger-border);
   padding-bottom: 6px;
   margin-bottom: 8px;
 }
 
 .fault-card-label {
   font-weight: 600;
-  color: #374151;
+  color: var(--text-muted);
   margin-right: 4px;
 }
 
@@ -1431,10 +1473,10 @@ onBeforeUnmount(() => {
   white-space: normal;
   word-break: break-word;
   font-size: 11px;
-  color: #4b5563;
+  color: var(--text);
   margin-top: 4px;
   padding-top: 6px;
-  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  border-top: 1px solid var(--border);
 }
 
 .fault-card-desc .fault-card-label {
