@@ -28,3 +28,8 @@ coverage
 *.sw?
 
 *.tsbuildinfo
+
+# 3D model assets (large; keep locally, do not commit)
+public/KF-21.gltf
+public/KF-21.bin
+public/KF-21*

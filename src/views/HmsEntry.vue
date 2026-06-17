@@ -1,5 +1,5 @@
 <template>
-  <div class="hms-entry">
+  <div class="hms-entry hms-app">
     <section class="hero">
       <div class="hero-bg"></div>
       <div class="hero-content">
@@ -103,6 +103,8 @@ import { useRouter } from 'vue-router'
 import { computed, ref, onMounted } from 'vue'
 import { findAllFleets, findAircraftByFleetId } from '../api/fleet'
 import { findFlightsByAircraftId } from '../api/flight'
+import { attachModel } from '../config/modelRegistry'
+import '../styles/hms-theme.css'
 
 const router = useRouter()
 
@@ -229,12 +231,15 @@ function resetAll() {
 
 function goToView() {
   if (!canOpen.value) return
+  const ac = aircraftList.value.find((a) => a.id === selectedAircraftId.value)
   router.push({
     name: 'View',
     params: {
       aircraftId: selectedAircraftId.value,
       flightId: selectedFlightId.value
-    }
+    },
+    // fleet.js kullanılmasa bile viewer'da modelUrl garanti edilir.
+    state: { aircraft: attachModel(ac) }
   })
 }
 </script>

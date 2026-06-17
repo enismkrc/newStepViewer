@@ -1,0 +1,75 @@
+/**
+ * HMS → ANA PROJE tema köprüsü (adaptör)
+ * =====================================================
+ * HMS bileşenleri kendi değişken adlarını kullanır (--border, --panel, --text, ...).
+ * Burada bu adları ANA PROJENİN main.css değişkenlerine bağlarız.
+ *
+ * - main.css'e HİÇBİR ŞEY eklemeyiz; eşleme `.hms-app` sınıfı altında, izole.
+ * - Ana proje dark mode'u `<html class="dark">` ile döner; semantik değişkenler
+ *   (--bg-*, --text-*, --border-color, --shadow-color) zaten değiştiği için HMS de
+ *   otomatik uyum sağlar. Ekstra tema mantığı yok.
+ * - Her eşlemede fallback değer var: ana proje değişkeni yoksa (standalone geliştirme)
+ *   HMS yine düzgün görünür.
+ *
+ * KULLANIM: HMS view'larının kök elementine `class="hms-app"` eklenir.
+ * Bu dosya view'lar ve router tarafından otomatik import edilir.
+ */
+
+.hms-app {
+  color: var(--text-primary, #0f172a);
+
+  /* Arka planlar */
+  --bg: var(--bg-tertiary, #f1f5f9);
+  --bg-header: var(--bg-primary, #ffffff);
+  --panel: var(--bg-primary, #ffffff);
+  --panel-2: var(--bg-secondary, #f8fafc);
+  --panel-3: var(--bg-tertiary, #f1f5f9);
+  --input-bg: var(--bg-primary, #ffffff);
+  --overlay-card-bg: var(--bg-primary, #ffffff);
+  --stage-bg: var(--bg-secondary, #f1f5f9);
+
+  /* Çerçeveler */
+  --border: var(--border-color, #e2e8f0);
+  --border-strong: var(--text-muted, #94a3b8);
+
+  /* Metin */
+  --text: var(--text-primary, #0f172a);
+  --text-strong: var(--text-primary, #0f172a);
+  --text-muted: var(--text-secondary, #64748b);
+  --text-subtle: var(--text-secondary, #94a3b8);
+  --overlay-card-text: var(--text-primary, #111827);
+
+  /* Vurgu / marka (mavi) — Tailwind primary paleti */
+  --accent: var(--color-primary-600, #2563eb);
+  --accent-hover: var(--color-primary-700, #1d4ed8);
+  --accent-text: var(--color-primary-700, #1e40af);
+  --accent-soft: var(--color-primary-50, #eff6ff);
+  --accent-ring: rgba(37, 99, 235, 0.25);
+
+  /* Hero (dekoratif gradyan — koyu yüzeyler) */
+  --hero-1: var(--color-surface-900, #0f172a);
+  --hero-2: var(--color-surface-800, #1e293b);
+  --hero-3: var(--color-surface-700, #334155);
+  --hero-glow: rgba(59, 130, 246, 0.15);
+
+  /* Hata / arıza (kırmızı — ana projede karşılığı yok, sabit) */
+  --danger: #b91c1c;
+  --danger-text: #b91c1c;
+  --danger-soft: #fef2f2;
+  --danger-border: rgba(185, 28, 28, 0.18);
+
+  /* Gölge / 3D sahne */
+  --shadow: var(--shadow-color, rgba(15, 23, 42, 0.12));
+  --stage-edge: var(--bg-tertiary, #f1f5f9);
+  --stage-glow: rgba(59, 130, 246, 0.12);
+}
+
+/* Ana proje dark mode (<html class="dark">) — okunabilirlik için birkaç ince ayar */
+:root.dark .hms-app,
+.dark .hms-app {
+  --accent-text: var(--color-primary-300, #93c5fd);
+  --accent-soft: rgba(59, 130, 246, 0.14);
+  --danger-text: #fca5a5;
+  --danger-soft: rgba(185, 28, 28, 0.16);
+  --danger-border: rgba(185, 28, 28, 0.3);
+}

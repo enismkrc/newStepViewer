@@ -1,5 +1,5 @@
 <template>
-  <div class="hms-viewer-page">
+  <div class="hms-viewer-page hms-app">
     <div v-if="loading" class="viewer-loading">
       <p>Loading aircraft…</p>
     </div>
@@ -34,8 +34,9 @@ import { useRoute } from 'vue-router'
 import { getAircraftById } from '../api/fleet'
 import { findFlightsByAircraftId } from '../api/flight'
 import { getFilteredMflData, mflListToFaults, flattenMflForViewer } from '../api/mfl'
-import { resolveModel } from '../config/modelRegistry'
+import { attachModel } from '../config/modelRegistry'
 import HmsViewer from '../components/HmsViewer.vue'
+import '../styles/hms-theme.css'
 
 const route = useRoute()
 
@@ -48,19 +49,11 @@ const loadError = ref('')
 
 const flightId = computed(() => route.params.flightId)
 
-/**
- * MANUEL MODEL: Model URL'i backend'den BEKLEMEYİZ. src/config/modelRegistry.js
- * üzerinden uçağın aircraftModel/id değerine göre çözülür. (Backend ileride modelUrl
- * döndürürse o önceliklidir.)
- */
+/** modelUrl/viewConfig attachModel ile loadViewerData içinde zenginleştirilir. */
 const model = computed(() => {
   const ac = aircraft.value
   if (!ac) return { modelUrl: '', viewConfig: null }
-  const resolved = resolveModel(ac)
-  return {
-    modelUrl: ac.modelUrl || resolved.modelUrl,
-    viewConfig: ac.viewConfig || resolved.viewConfig
-  }
+  return { modelUrl: ac.modelUrl || '', viewConfig: ac.viewConfig ?? null }
 })
 
 async function loadViewerData(aircraftId, fId) {
@@ -70,11 +63,17 @@ async function loadViewerData(aircraftId, fId) {
   faults.value = []
   flightLabel.value = ''
   try {
-    const [ac, flightRows, mflRaw] = await Promise.all([
-      getAircraftById(aircraftId),
+    // Ana projede fleet.js kullanılmıyorsa giriş ekranı uçağı router state ile geçirir.
+    const fromState = history.state?.aircraft
+    const stateAircraft =
+      fromState && String(fromState.id) === String(aircraftId) ? fromState : null
+
+    const [acRaw, flightRows, mflRaw] = await Promise.all([
+      stateAircraft ? Promise.resolve(stateAircraft) : getAircraftById(aircraftId),
       findFlightsByAircraftId(aircraftId),
       getFilteredMflData(fId)
     ])
+    const ac = attachModel(acRaw)
     aircraft.value = ac
     if (!ac) {
       loadError.value = 'Uçak bulunamadı.'

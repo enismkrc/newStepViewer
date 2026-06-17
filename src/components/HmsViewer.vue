@@ -143,11 +143,10 @@ import { ViewportGizmo } from 'three-viewport-gizmo'
 import { createViewportGizmo } from '../three/viewportGizmoConfig.js'
 import '../three/viewportGizmo.css'
 import { mergeViewConfig, applyModelOrientation, frameCameraOnBox } from '../three/defaultView.js'
-import { useTheme } from '../composables/useTheme.js'
+import { observeStageBackground, readStageColor } from '../three/sceneBackground.js'
 
-// 3D sahne arka planı temaya göre değişir.
-const { theme } = useTheme()
-const SCENE_BG = { dark: 0x0b1220, light: 0xf3f4f6 }
+// 3D sahne arka planı --stage-bg CSS değişkeninden okunur (ana projenin temasına uyar).
+let disposeStageBg = null
 
 /**
  * HMS (Health Management System) viewer (Three.js)
@@ -325,11 +324,6 @@ watch(activeFaultNames, () => {
 })
 watch(transparentOthers, () => updateFaultyHighlight())
 
-// Tema değişince 3D sahne arka planını güncelle.
-watch(theme, (t) => {
-  if (scene) scene.background = new THREE.Color(SCENE_BG[t] ?? SCENE_BG.dark)
-})
-
 watch([isIsolated, partDetailPanelOpen], () => {
   setTimeout(onResize, 80)
 })
@@ -391,7 +385,7 @@ function initThree() {
   if (!canvas) return
 
   scene = new THREE.Scene()
-  scene.background = new THREE.Color(SCENE_BG[theme.value] ?? SCENE_BG.dark)
+  scene.background = readStageColor(stageRef.value)
 
   camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100000)
   camera.position.set(10, 8, 10)
@@ -979,10 +973,12 @@ async function loadModelFromUrl(url) {
 
 onMounted(() => {
   initThree()
+  disposeStageBg = observeStageBackground(() => scene, () => stageRef.value)
   loadModelFromUrl(props.modelUrl)
 })
 
 onBeforeUnmount(() => {
+  disposeStageBg?.()
   window.removeEventListener('resize', onResize)
   if (rafId) cancelAnimationFrame(rafId)
   const canvas = canvasEl.value

@@ -1,5 +1,5 @@
 <template>
-  <div class="import-tool">
+  <div class="import-tool hms-app">
     <header class="import-header">
       <h1 class="import-title">GLB Model Preview</h1>
       <p class="import-desc">Upload a GLB / glTF file to preview it. GLB files are used directly by HMS — no conversion needed.</p>
@@ -12,6 +12,7 @@
 
 <script setup>
 import GlbUploadViewer from '../components/GlbUploadViewer.vue'
+import '../styles/hms-theme.css'
 </script>
 
 <style scoped>

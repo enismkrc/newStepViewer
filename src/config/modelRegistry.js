@@ -60,8 +60,31 @@ export const MODEL_REGISTRY = {
   }
 }
 
+/** Backend alan adları farklı olabilir; registry eşlemesi için tek anahtar üretir. */
+function getAircraftModelKey(aircraft) {
+  const raw =
+    aircraft.aircraftModel ??
+    aircraft.model ??
+    aircraft.aircraftType ??
+    aircraft.type ??
+    ''
+  return String(raw).trim()
+}
+
+/** byModel eşlemesi — büyük/küçük harf farkını tolere eder. */
+function lookupByModel(modelKey) {
+  if (!modelKey) return undefined
+  if (MODEL_REGISTRY.byModel[modelKey]) return MODEL_REGISTRY.byModel[modelKey]
+  const lower = modelKey.toLowerCase()
+  for (const [key, entry] of Object.entries(MODEL_REGISTRY.byModel)) {
+    if (key.toLowerCase() === lower) return entry
+  }
+  return undefined
+}
+
 /**
  * Bir uçak için { modelUrl, viewConfig } çözer.
+ * fleet.js kullanılmasa bile viewer/entry bu fonksiyonu (veya attachModel) çağırmalıdır.
  * @param {object|null} aircraft  Backend'den gelen uçak nesnesi (id, aircraftModel, ...)
  * @returns {{ modelUrl: string, viewConfig: object|null }}
  */
@@ -69,7 +92,7 @@ export function resolveModel(aircraft) {
   if (!aircraft) return { modelUrl: '', viewConfig: null }
   return (
     MODEL_REGISTRY.byAircraftId[aircraft.id] ??
-    MODEL_REGISTRY.byModel[aircraft.aircraftModel] ??
+    lookupByModel(getAircraftModelKey(aircraft)) ??
     MODEL_REGISTRY.DEFAULT
   )
 }
