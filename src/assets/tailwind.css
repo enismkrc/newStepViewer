@@ -1,0 +1,59 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  /* primary ana renk (mavi) */
+  --color-primary-50: #eff6ff;
+  --color-primary-100: #dbeafe;
+  --color-primary-200: #bfdbfe;
+  --color-primary-300: #93c5fd;
+  --color-primary-400: #60a5fa;
+  --color-primary-500: #3b82f6;
+  --color-primary-600: #2563eb;
+  --color-primary-700: #1d4ed8;
+  --color-primary-800: #1e40af;
+  --color-primary-900: #1e3a8a;
+  --color-primary-950: #172554;
+
+  /* surface- yuzey renkleri */
+  --color-surface-0: #ffffff;
+  --color-surface-50: #f8fafc;
+  --color-surface-100: #f1f5f9;
+  --color-surface-200: #e2e8f0;
+  --color-surface-300: #cbd5e1;
+  --color-surface-400: #94a3b8;
+  --color-surface-500: #64748b;
+  --color-surface-600: #475569;
+  --color-surface-700: #334155;
+  --color-surface-800: #1e293b;
+  --color-surface-900: #0f172a;
+  --color-surface-950: #020617;
+}
+
+/* css degiskenleri */
+:root {
+  --bg-primary: var(--color-surface-0);
+  --bg-secondary: var(--color-surface-50);
+  --bg-tertiary: var(--color-surface-100);
+  --text-primary: var(--color-surface-900);
+  --text-secondary: var(--color-surface-500);
+  --text-muted: var(--color-surface-400);
+  --border-color: var(--color-surface-200);
+  --hover-bg: var(--color-surface-100);
+  --active-bg: var(--color-surface-50);
+  --shadow-color: rgba(0, 0, 0, 0.1);
+}
+
+:root.dark {
+  --bg-primary: var(--color-surface-900);
+  --bg-secondary: var(--color-surface-800);
+  --bg-tertiary: var(--color-surface-700);
+  --text-primary: var(--color-surface-50);
+  --text-secondary: var(--color-surface-400);
+  --text-muted: var(--color-surface-500);
+  --border-color: var(--color-surface-700);
+  --hover-bg: var(--color-surface-700);
+  --active-bg: var(--color-surface-900);
+  --shadow-color: rgba(0, 0, 0, 0.4);
+}

@@ -7,29 +7,52 @@
       </div>
 
       <div class="controls">
-        <label class="upload">
-          Select file
-          <input
-            class="file"
-            type="file"
-            accept=".glb,.gltf"
-            @change="onFileChange"
-          />
-        </label>
-
-        <button class="btn" :disabled="!modelLoaded" @click="resetView">Reset view</button>
-        <button class="btn" :disabled="!modelLoaded" @click="toggleWireframe">
-          {{ wireframe ? 'Solid' : 'Wireframe' }}
-        </button>
-        <button class="btn" :class="{ active: treeOpen }" :disabled="!modelLoaded || !modelTree.length" @click="treeOpen = !treeOpen">
-          Model tree
-        </button>
-        <button v-if="isIsolated" class="btn btn-back" @click="showAllParts">
-          ← Show all
-        </button>
-        <button v-if="isIsolated && partDetailData" type="button" class="btn btn-panel-toggle" :class="{ active: partDetailPanelOpen }" @click="partDetailPanelOpen = !partDetailPanelOpen">
-          {{ partDetailPanelOpen ? 'Close detail' : 'Part detail' }}
-        </button>
+        <input
+          ref="fileInputEl"
+          class="file-input-hidden"
+          type="file"
+          accept=".glb,.gltf"
+          @change="onFileChange"
+        />
+        <Button label="Select file" icon="pi pi-upload" @click="fileInputEl?.click()" />
+        <Button
+          label="Reset view"
+          icon="pi pi-refresh"
+          severity="secondary"
+          outlined
+          :disabled="!modelLoaded"
+          @click="resetView"
+        />
+        <Button
+          :label="wireframe ? 'Solid' : 'Wireframe'"
+          icon="pi pi-th-large"
+          severity="secondary"
+          outlined
+          :disabled="!modelLoaded"
+          @click="toggleWireframe"
+        />
+        <Button
+          label="Model tree"
+          icon="pi pi-sitemap"
+          :severity="treeOpen ? undefined : 'secondary'"
+          :outlined="!treeOpen"
+          :disabled="!modelLoaded || !modelTree.length"
+          @click="treeOpen = !treeOpen"
+        />
+        <Button
+          v-if="isIsolated"
+          label="Show all"
+          icon="pi pi-arrow-left"
+          @click="showAllParts"
+        />
+        <Button
+          v-if="isIsolated && partDetailData"
+          :label="partDetailPanelOpen ? 'Close detail' : 'Part detail'"
+          :severity="partDetailPanelOpen ? undefined : 'secondary'"
+          :outlined="!partDetailPanelOpen"
+          icon="pi pi-info-circle"
+          @click="partDetailPanelOpen = !partDetailPanelOpen"
+        />
       </div>
     </header>
 
@@ -59,9 +82,9 @@
           <div class="tree-panel-header">
             <span class="tree-panel-title">Model tree</span>
             <div class="tree-panel-actions">
-              <button type="button" class="tree-mini-btn" title="Expand all" @click="expandAllNodes">+</button>
-              <button type="button" class="tree-mini-btn" title="Collapse all" @click="collapseAllNodes">−</button>
-              <button type="button" class="tree-mini-btn" title="Close" @click="treeOpen = false">×</button>
+              <Button icon="pi pi-plus" severity="secondary" text rounded size="small" title="Expand all" @click="expandAllNodes" />
+              <Button icon="pi pi-minus" severity="secondary" text rounded size="small" title="Collapse all" @click="collapseAllNodes" />
+              <Button icon="pi pi-times" severity="secondary" text rounded size="small" title="Close" @click="treeOpen = false" />
             </div>
           </div>
           <div class="tree-list">
@@ -100,7 +123,14 @@
       <aside v-if="isIsolated && partDetailData && partDetailPanelOpen" class="part-detail-panel">
         <div class="part-detail-panel-header">
           <h3 class="part-detail-title">Part Detail</h3>
-          <button type="button" class="part-detail-close" aria-label="Close" @click="partDetailPanelOpen = false">×</button>
+          <Button
+            icon="pi pi-times"
+            severity="secondary"
+            text
+            rounded
+            aria-label="Close"
+            @click="partDetailPanelOpen = false"
+          />
         </div>
         <div class="part-detail-heading">{{ partDetailData.partName }}</div>
         <dl class="part-detail-list">
@@ -126,6 +156,7 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import Button from 'primevue/button'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
@@ -140,6 +171,7 @@ import { observeStageBackground, readStageColor } from '../three/sceneBackground
 let disposeStageBg = null
 
 const canvasEl = ref(null)
+const fileInputEl = ref(null)
 const statusText = ref('Select a GLB / glTF file to load.')
 const errorText = ref('')
 const fileName = ref('')
@@ -864,7 +896,7 @@ onBeforeUnmount(() => {
 .title {
   font-size: 22px;
   font-weight: 800;
-  color: var(--text-strong);
+  color: var(--text-primary);
 }
 
 .subtitle {
@@ -879,64 +911,8 @@ onBeforeUnmount(() => {
   align-items: center;
 }
 
-.upload {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  border-radius: 10px;
-  border: 1px solid #e0e6ff;
-  background: linear-gradient(135deg, #111a3a, #243b6b);
-  color: white;
-  cursor: pointer;
-  user-select: none;
-  font-weight: 700;
-}
-
-.file {
+.file-input-hidden {
   display: none;
-}
-
-.btn {
-  padding: 10px 14px;
-  border-radius: 10px;
-  border: 1px solid var(--border-strong);
-  background: var(--panel-3);
-  color: var(--text);
-  cursor: pointer;
-  font-weight: 700;
-}
-
-.btn:hover:not(:disabled) {
-  background: var(--border-strong);
-}
-
-.btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.btn.active {
-  background: var(--accent);
-  color: white;
-  border-color: var(--accent);
-}
-
-.btn-back {
-  background: var(--accent);
-  color: white;
-  border-color: var(--accent);
-}
-
-.btn-panel-toggle {
-  background: var(--panel-3);
-  color: var(--text-muted);
-  border-color: var(--border-strong);
-}
-.btn-panel-toggle.active {
-  background: var(--accent);
-  color: white;
-  border-color: var(--accent);
 }
 
 .fault-row {
@@ -948,7 +924,7 @@ onBeforeUnmount(() => {
 
 .fault-label {
   font-weight: 700;
-  color: var(--text);
+  color: var(--text-primary);
 }
 
 .fault-select {
@@ -956,15 +932,15 @@ onBeforeUnmount(() => {
   max-width: 100%;
   padding: 8px 12px;
   border-radius: 8px;
-  border: 1px solid var(--border-strong);
-  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
   font-size: 14px;
-  color: var(--text);
+  color: var(--text-primary);
 }
 
 .fault-select option {
-  background: var(--input-bg);
-  color: var(--text);
+  background: var(--bg-primary);
+  color: var(--text-primary);
 }
 
 .fault-check {
@@ -973,7 +949,7 @@ onBeforeUnmount(() => {
   gap: 8px;
   cursor: pointer;
   font-size: 14px;
-  color: var(--text);
+  color: var(--text-primary);
   user-select: none;
 }
 
@@ -986,18 +962,18 @@ onBeforeUnmount(() => {
 .status {
   padding: 12px 14px;
   border-radius: 12px;
-  background: var(--panel);
-  border: 1px solid var(--border);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
 }
 
 .statusText {
-  color: var(--text);
+  color: var(--text-primary);
   font-weight: 700;
 }
 
 .errorText {
   margin-top: 6px;
-  color: var(--danger-text);
+  color: #ef4444;
   font-weight: 700;
 }
 
@@ -1015,7 +991,7 @@ onBeforeUnmount(() => {
   height: min(72vh, 720px);
   overflow: hidden;
   border-radius: 14px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-color);
 }
 
 .stage-wrapper-split {
@@ -1029,7 +1005,7 @@ onBeforeUnmount(() => {
   min-height: 0;
   border-radius: 0;
   border: none;
-  border-right: 1px solid var(--border);
+  border-right: 1px solid var(--border-color);
 }
 
 .stage-wrapper-split .part-detail-panel {
@@ -1044,7 +1020,7 @@ onBeforeUnmount(() => {
   width: 340px;
   max-width: 100%;
   padding: 20px 18px;
-  background: var(--panel);
+  background: var(--bg-primary);
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -1063,37 +1039,16 @@ onBeforeUnmount(() => {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--text-subtle);
-}
-
-.part-detail-close {
-  flex-shrink: 0;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: none;
-  border-radius: 6px;
-  background: var(--panel-3);
   color: var(--text-muted);
-  font-size: 20px;
-  line-height: 1;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.part-detail-close:hover {
-  background: var(--border-strong);
-  color: var(--text);
 }
 
 .part-detail-heading {
   font-size: 18px;
   font-weight: 800;
-  color: var(--text-strong);
+  color: var(--text-primary);
   margin-bottom: 16px;
   padding-bottom: 12px;
-  border-bottom: 2px solid var(--accent);
+  border-bottom: 2px solid var(--color-primary-600);
 }
 
 .part-detail-list {
@@ -1108,7 +1063,7 @@ onBeforeUnmount(() => {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--text-subtle);
+  color: var(--text-muted);
   margin: 0 0 2px 0;
 }
 
@@ -1116,7 +1071,7 @@ onBeforeUnmount(() => {
   margin: 0 0 4px 0;
   font-size: 13px;
   line-height: 1.5;
-  color: var(--text);
+  color: var(--text-primary);
 }
 
 .part-detail-list dd:last-of-type {
@@ -1128,7 +1083,7 @@ onBeforeUnmount(() => {
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  background: radial-gradient(1200px 600px at 50% 60%, var(--stage-glow), var(--stage-edge));
+  background: radial-gradient(1200px 600px at 50% 60%, rgba(59, 130, 246, 0.12), var(--bg-tertiary));
 }
 
 .stage-wrapper:not(.stage-wrapper-split) .stage {
@@ -1161,12 +1116,12 @@ onBeforeUnmount(() => {
   min-width: 200px;
   max-width: 320px;
   padding: 12px 16px;
-  background: var(--overlay-card-bg);
-  border: 1px solid var(--danger);
+  background: var(--bg-primary);
+  border: 1px solid #dc2626;
   border-radius: 8px;
-  box-shadow: 0 4px 16px var(--shadow);
+  box-shadow: 0 4px 16px var(--shadow-color);
   font-size: 12px;
-  color: var(--overlay-card-text);
+  color: var(--text-primary);
   line-height: 1.45;
   font-family: 'Segoe UI', system-ui, sans-serif;
 }
@@ -1192,8 +1147,8 @@ onBeforeUnmount(() => {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
-  color: var(--danger-text);
-  border-bottom: 1px solid var(--danger-border);
+  color: #ef4444;
+  border-bottom: 1px solid rgba(220, 38, 38, 0.28);
   padding-bottom: 6px;
   margin-bottom: 8px;
 }
@@ -1214,10 +1169,10 @@ onBeforeUnmount(() => {
   white-space: normal;
   word-break: break-word;
   font-size: 11px;
-  color: var(--text);
+  color: var(--text-primary);
   margin-top: 6px;
   padding-top: 6px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-color);
 }
 .fault-card-warnings .fault-card-label {
   display: block;
@@ -1239,10 +1194,10 @@ onBeforeUnmount(() => {
   max-height: calc(100% - 24px);
   display: flex;
   flex-direction: column;
-  background: var(--panel);
-  border: 1px solid var(--border);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
   border-radius: 10px;
-  box-shadow: 0 6px 20px var(--shadow);
+  box-shadow: 0 6px 20px var(--shadow-color);
   overflow: hidden;
 }
 
@@ -1251,8 +1206,8 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   padding: 8px 10px;
-  border-bottom: 1px solid var(--border);
-  background: var(--panel-2);
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
 }
 
 .tree-panel-title {
@@ -1268,22 +1223,6 @@ onBeforeUnmount(() => {
   gap: 4px;
 }
 
-.tree-mini-btn {
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  background: var(--panel-3);
-  color: var(--text);
-  font-size: 14px;
-  line-height: 1;
-  cursor: pointer;
-}
-.tree-mini-btn:hover {
-  background: var(--border-strong);
-}
-
 .tree-list {
   overflow-y: auto;
   padding: 4px 0;
@@ -1296,13 +1235,13 @@ onBeforeUnmount(() => {
   padding-right: 6px;
   min-height: 26px;
   font-size: 13px;
-  color: var(--text);
+  color: var(--text-primary);
 }
 .tree-row.selected {
-  background: var(--danger-soft);
+  background: rgba(220, 38, 38, 0.1);
 }
 .tree-row.selected .tree-name {
-  color: var(--danger-text);
+  color: #ef4444;
   font-weight: 700;
 }
 

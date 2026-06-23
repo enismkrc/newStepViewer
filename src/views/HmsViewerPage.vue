@@ -1,17 +1,21 @@
 <template>
-  <div class="hms-viewer-page hms-app">
+  <div class="hms-viewer-page component-view">
     <div v-if="loading" class="viewer-loading">
       <p>Loading aircraft…</p>
     </div>
     <div v-else-if="!aircraft" class="viewer-error">
       <p>{{ loadError || 'Aircraft not found.' }}</p>
-      <router-link to="/" class="back-link">← Back to selection</router-link>
+      <router-link :to="{ name: 'Entry' }" custom v-slot="{ navigate }">
+        <Button label="Back to selection" icon="pi pi-arrow-left" severity="secondary" text @click="navigate" />
+      </router-link>
     </div>
     <template v-else>
       <div class="viewer-header">
-        <router-link to="/" class="back-link">← Select another aircraft</router-link>
+        <router-link :to="{ name: 'Entry' }" custom v-slot="{ navigate }">
+          <Button label="Select another aircraft" icon="pi pi-arrow-left" severity="secondary" text @click="navigate" />
+        </router-link>
         <span class="viewer-label">
-          {{ aircraft.tailNumber }} — {{ flightLabel }} — Model viewer
+          {{ aircraft.tailNumber }} — {{ flightLabel }} — Model Viewer
         </span>
       </div>
       <div class="viewer-wrap">
@@ -36,7 +40,7 @@ import { findFlightsByAircraftId } from '../api/flight'
 import { getFilteredMflData, mflListToFaults, flattenMflForViewer } from '../api/mfl'
 import { attachModel } from '../config/modelRegistry'
 import HmsViewer from '../components/HmsViewer.vue'
-import '../styles/hms-theme.css'
+import Button from 'primevue/button'
 
 const route = useRoute()
 
@@ -119,7 +123,7 @@ watch(
 }
 
 .viewer-error {
-  color: var(--danger-text);
+  color: #ef4444;
 }
 
 .viewer-header {
@@ -128,17 +132,6 @@ watch(
   gap: 16px;
   flex-wrap: wrap;
   padding: 0 4px;
-}
-
-.back-link {
-  font-size: 0.875rem;
-  font-weight: 700;
-  color: var(--accent-text);
-  text-decoration: none;
-}
-
-.back-link:hover {
-  text-decoration: underline;
 }
 
 .viewer-label {

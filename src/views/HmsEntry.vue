@@ -1,110 +1,107 @@
 <template>
-  <div class="hms-entry hms-app">
-    <section class="hero">
-      <div class="hero-bg"></div>
-      <div class="hero-content">
-        <h1 class="hero-title">Aircraft Health Management</h1>
-        <p class="hero-subtitle">Select base → fleet → aircraft → flight to open the model viewer.</p>
+  <div class="component-view">
+    <div class="page-header">
+      <div>
+        <h1>Aircraft Health Management</h1>
+        <p>Base → Fleet → Aircraft → Flight flight to open the 3D viewer.</p>
       </div>
-    </section>
-
-    <section class="picker-section">
-      <div class="picker-head">
-        <h2 class="section-title">Selection</h2>
-        <button v-if="canReset" type="button" class="reset-btn" @click="resetAll">Reset</button>
+      <div class="header-actions">
+        <Button
+          v-if="canReset"
+          label="Reset"
+          icon="pi pi-refresh"
+          severity="secondary"
+          outlined
+          @click="resetAll"
+        />
       </div>
+    </div>
 
-      <div v-if="loadingFleets" class="data-status">Loading fleets…</div>
-      <div v-else-if="loadError" class="data-status data-status-error">{{ loadError }}</div>
+    <div class="component-container">
+      <div v-if="loadingFleets" class="hms-status">Loading fleets…</div>
+      <div v-else-if="loadError" class="hms-status hms-status-error">{{ loadError }}</div>
 
       <div class="steps">
         <!-- 1) BASE -->
         <div class="step">
-          <label class="step-label" for="baseSelect">Base</label>
-          <div class="select-wrap">
-            <select
-              id="baseSelect"
-              class="select"
-              :disabled="loadingFleets || !bases.length"
-              :value="selectedBase"
-              @change="onBaseChange"
-            >
-              <option value="" disabled>Select a base…</option>
-              <option v-for="b in bases" :key="b" :value="b">{{ b }}</option>
-            </select>
-          </div>
+          <label class="step-label">Base</label>
+          <Select
+            :model-value="selectedBase"
+            :options="bases"
+            placeholder="Select a base…"
+            :disabled="loadingFleets || !bases.length"
+            fluid
+            @change="onBaseChange"
+          />
         </div>
 
         <!-- 2) FLEET -->
         <div class="step" :class="{ disabled: !selectedBase }">
-          <label class="step-label" for="fleetSelect">Fleet</label>
-          <div class="select-wrap">
-            <select
-              id="fleetSelect"
-              class="select"
-              :disabled="!selectedBase"
-              :value="selectedFleetId"
-              @change="onFleetChange"
-            >
-              <option value="" disabled>{{ selectedBase ? 'Select a fleet…' : 'Select a base first' }}</option>
-              <option v-for="f in fleets" :key="f.id" :value="f.id">{{ f.name }}</option>
-            </select>
-          </div>
+          <label class="step-label">Fleet</label>
+          <Select
+            :model-value="selectedFleetId"
+            :options="fleetOptions"
+            option-label="name"
+            option-value="id"
+            :placeholder="selectedBase ? 'Select a fleet…' : 'Select a base first'"
+            :disabled="!selectedBase"
+            fluid
+            @change="onFleetChange"
+          />
         </div>
 
         <!-- 3) AIRCRAFT -->
         <div class="step" :class="{ disabled: !selectedFleetId }">
-          <label class="step-label" for="aircraftSelect">Aircraft</label>
-          <div class="select-wrap">
-            <select
-              id="aircraftSelect"
-              class="select"
-              :disabled="!selectedFleetId || loadingAircraft"
-              :value="selectedAircraftId"
-              @change="onAircraftChange"
-            >
-              <option value="" disabled>{{ aircraftPlaceholder }}</option>
-              <option v-for="ac in aircraftList" :key="ac.id" :value="ac.id">
-                {{ ac.tailNumber }} — {{ ac.name }}
-              </option>
-            </select>
-          </div>
+          <label class="step-label">Aircraft</label>
+          <Select
+            :model-value="selectedAircraftId"
+            :options="aircraftOptions"
+            option-label="label"
+            option-value="id"
+            :placeholder="aircraftPlaceholder"
+            :disabled="!selectedFleetId || loadingAircraft"
+            fluid
+            @change="onAircraftChange"
+          />
         </div>
 
         <!-- 4) FLIGHT -->
         <div class="step" :class="{ disabled: !selectedAircraftId }">
-          <label class="step-label" for="flightSelect">Flight</label>
-          <div class="select-wrap">
-            <select
-              id="flightSelect"
-              class="select"
-              :disabled="!selectedAircraftId || loadingFlights"
-              :value="selectedFlightId"
-              @change="onFlightChange"
-            >
-              <option value="" disabled>{{ flightPlaceholder }}</option>
-              <option v-for="fl in flights" :key="fl.id" :value="fl.id">{{ fl.flightNo }}</option>
-            </select>
-          </div>
+          <label class="step-label">Flight</label>
+          <Select
+            :model-value="selectedFlightId"
+            :options="flights"
+            option-label="flightNo"
+            option-value="id"
+            :placeholder="flightPlaceholder"
+            :disabled="!selectedAircraftId || loadingFlights"
+            fluid
+            @change="onFlightChange"
+          />
         </div>
       </div>
 
       <div class="open-bar">
-        <button type="button" class="open-btn" :disabled="!canOpen" @click="goToView">
-          Open model viewer
-        </button>
+        <Button
+          label="Open model viewer"
+          icon="pi pi-box"
+          :disabled="!canOpen"
+          fluid
+          @click="goToView"
+        />
       </div>
-    </section>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { useRouter } from 'vue-router'
 import { computed, ref, onMounted } from 'vue'
+import Select from 'primevue/select'
+import Button from 'primevue/button'
 import { findAllFleets, findAircraftByFleetId } from '../api/fleet'
 import { findFlightsByAircraftId } from '../api/flight'
 import { attachModel } from '../config/modelRegistry'
-import '../styles/hms-theme.css'
 
 const router = useRouter()
 
@@ -133,11 +130,16 @@ const bases = computed(() => {
   return Array.from(set).sort((a, b) => a.localeCompare(b))
 })
 
-// Seçili base'e ait filolar.
-const fleets = computed(() => {
+// Seçili base'e ait filolar (PrimeVue Select için {id,name} listesi).
+const fleetOptions = computed(() => {
   if (!selectedBase.value) return []
   return allFleets.value.filter((f) => (f.base ?? '') === selectedBase.value)
 })
+
+// PrimeVue Select tek bir optionLabel string'i ister; "tail — name" birleşik etiket.
+const aircraftOptions = computed(() =>
+  aircraftList.value.map((a) => ({ ...a, label: `${a.tailNumber} — ${a.name}` }))
+)
 
 const aircraftPlaceholder = computed(() => {
   if (!selectedFleetId.value) return 'Select a fleet first'
@@ -165,9 +167,9 @@ onMounted(async () => {
   }
 })
 
+// PrimeVue Select @change payload: { originalEvent, value }
 function onBaseChange(e) {
-  selectedBase.value = e.target.value
-  // Alt seçimleri sıfırla.
+  selectedBase.value = e.value
   selectedFleetId.value = ''
   selectedAircraftId.value = ''
   selectedFlightId.value = ''
@@ -176,7 +178,7 @@ function onBaseChange(e) {
 }
 
 async function onFleetChange(e) {
-  selectedFleetId.value = e.target.value
+  selectedFleetId.value = e.value
   selectedAircraftId.value = ''
   selectedFlightId.value = ''
   aircraftList.value = []
@@ -195,7 +197,7 @@ async function onFleetChange(e) {
 }
 
 async function onAircraftChange(e) {
-  selectedAircraftId.value = e.target.value
+  selectedAircraftId.value = e.value
   selectedFlightId.value = ''
   flights.value = []
   if (!selectedAircraftId.value) return
@@ -212,7 +214,7 @@ async function onAircraftChange(e) {
 }
 
 function onFlightChange(e) {
-  selectedFlightId.value = e.target.value
+  selectedFlightId.value = e.value
 }
 
 const canOpen = computed(() => !!(selectedAircraftId.value && selectedFlightId.value))
@@ -245,102 +247,24 @@ function goToView() {
 </script>
 
 <style scoped>
-.hms-entry {
-  display: flex;
-  flex-direction: column;
-  min-height: 100%;
-  width: 100%;
+.hms-status {
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--hover-bg);
+  color: var(--text-secondary);
+  font-weight: 600;
 }
 
-.hero {
-  position: relative;
-  padding: 48px 24px 40px;
-  overflow: hidden;
+.hms-status-error {
+  background: rgba(220, 38, 38, 0.1);
+  color: #ef4444;
 }
 
-.hero-bg {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg, var(--hero-1) 0%, var(--hero-2) 45%, var(--hero-3) 100%);
-}
-
-.hero-bg::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(ellipse 80% 50% at 50% 0%, var(--hero-glow), transparent 60%);
-  pointer-events: none;
-}
-
-.hero-content {
-  position: relative;
-  z-index: 1;
-  text-align: center;
-  max-width: 640px;
-  margin: 0 auto;
-}
-
-.hero-title {
-  margin: 0 0 12px;
-  font-size: clamp(1.75rem, 4vw, 2.25rem);
-  font-weight: 800;
-  color: #f8fafc;
-  letter-spacing: -0.03em;
-  line-height: 1.2;
-}
-
-.hero-subtitle {
-  margin: 0;
-  font-size: 1rem;
-  color: #94a3b8;
-  font-weight: 500;
-}
-
-.picker-section {
-  padding: 28px 24px 48px;
-  background: var(--bg);
-  border-top: 1px solid var(--border);
-  flex: 1;
-}
-
-.picker-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  max-width: 720px;
-  margin: 0 auto 14px;
-}
-
-.reset-btn {
-  padding: 8px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--border-strong);
-  background: var(--panel-3);
-  color: var(--text-muted);
-  cursor: pointer;
-  font-weight: 700;
-}
-
-.reset-btn:hover {
-  background: var(--border-strong);
-  color: var(--text-strong);
-}
-
-/* Dikey (alt alta) adımlar */
 .steps {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  max-width: 720px;
-  margin: 0 auto;
-}
-
-.step {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 14px 14px 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
 }
 
 .step.disabled {
@@ -348,103 +272,16 @@ function goToView() {
 }
 
 .step-label {
-  font-size: 0.75rem;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-subtle);
-  margin-bottom: 10px;
   display: block;
-}
-
-.select-wrap {
-  position: relative;
-}
-
-.select {
-  width: 100%;
-  padding: 12px 42px 12px 12px;
-  border-radius: 12px;
-  border: 1px solid var(--border-strong);
-  background: var(--input-bg);
-  color: var(--text);
+  margin-bottom: 8px;
+  font-size: 0.75rem;
   font-weight: 700;
-  appearance: none;
-  cursor: pointer;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 20 20'%3E%3Cpath fill='%2394a3b8' d='M5.3 7.3a1 1 0 0 1 1.4 0L10 10.6l3.3-3.3a1 1 0 1 1 1.4 1.4l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 0 1 0-1.4Z'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 14px center;
-}
-
-.select:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-ring);
-}
-
-.select:disabled {
-  cursor: not-allowed;
-  opacity: 0.7;
-  background-color: var(--panel-2);
-}
-
-.select option {
-  background: var(--input-bg);
-  color: var(--text);
-}
-
-.data-status {
-  max-width: 720px;
-  margin: 0 auto 12px;
-  padding: 10px 14px;
-  border-radius: 10px;
-  background: var(--accent-soft);
-  color: var(--accent-text);
-  font-weight: 700;
-  text-align: center;
-  border: 1px solid var(--accent-ring);
-}
-
-.data-status-error {
-  background: var(--danger-soft);
-  color: var(--danger-text);
-  border-color: var(--danger-border);
-}
-
-.section-title {
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.06em;
+  color: var(--text-secondary);
 }
 
 .open-bar {
-  max-width: 720px;
-  margin: 20px auto 0;
-  text-align: center;
-}
-
-.open-btn {
-  width: 100%;
-  padding: 14px 24px;
-  border: none;
-  border-radius: 10px;
-  background: var(--accent);
-  color: #fff;
-  font-weight: 700;
-  font-size: 0.9375rem;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.open-btn:hover:not(:disabled) {
-  background: var(--accent-hover);
-}
-
-.open-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
+  margin-top: 20px;
 }
 </style>

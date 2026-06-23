@@ -1,5 +1,4 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import '../styles/hms-theme.css'
 
 const routes = [
   {

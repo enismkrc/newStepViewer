@@ -2,18 +2,18 @@
  * 3D sahne arka planını CSS değişkeninden (`--stage-bg`) okur ve ana projenin
  * dark mode'u (<html class="dark">) değişince otomatik günceller.
  *
- * Tema state'i YOK; renk doğrudan DOM'dan (hms-app değişkenlerinden) okunur.
+ * Tema state'i YOK; renk doğrudan DOM'dan (--bg-secondary değişkeninden) okunur.
  */
 import * as THREE from 'three'
 
 const FALLBACK = '#f1f5f9'
 
-/** Verilen elementte çözülmüş `--stage-bg` rengini THREE.Color olarak döndürür. */
+/** Verilen elementte çözülmüş `--bg-secondary` rengini THREE.Color olarak döndürür. */
 export function readStageColor(el) {
   let raw = ''
   try {
     raw = getComputedStyle(el || document.documentElement)
-      .getPropertyValue('--stage-bg')
+      .getPropertyValue('--bg-secondary')
       .trim()
   } catch {
     // erişilemezse fallback
