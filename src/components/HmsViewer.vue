@@ -6,6 +6,9 @@
       </div>
 
       <div class="controls">
+        <router-link :to="{ name: 'Entry' }" custom v-slot="{ navigate }">
+          <Button label="Back" icon="pi pi-arrow-left" severity="secondary" outlined :disabled="!modelLoaded" @click="navigate" />
+        </router-link>
         <Button
           label="Reset view"
           icon="pi pi-refresh"

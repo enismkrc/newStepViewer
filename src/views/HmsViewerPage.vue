@@ -11,9 +11,6 @@
     </div>
     <template v-else>
       <div class="viewer-header">
-        <router-link :to="{ name: 'Entry' }" custom v-slot="{ navigate }">
-          <Button label="Select another aircraft" icon="pi pi-arrow-left" severity="secondary" text @click="navigate" />
-        </router-link>
         <span class="viewer-label">
           {{ aircraft.tailNumber }} — {{ flightLabel }} — Model Viewer
         </span>

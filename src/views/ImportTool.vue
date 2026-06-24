@@ -3,15 +3,18 @@
     <div class="page-header">
       <div>
         <h1>GLB Model Preview</h1>
-        <p>Upload a GLB / glTF file to preview it. GLB files are used directly by HMS — no conversion needed.</p>
       </div>
     </div>
     <div class="component-container">
-      <GlbUploadViewer />
+      <GlbUploadViewer :view-config="previewViewConfig" />
     </div>
   </div>
 </template>
 
 <script setup>
 import GlbUploadViewer from '../components/GlbUploadViewer.vue'
+import { MODEL_REGISTRY } from '../config/modelRegistry.js'
+
+/** GLB preview — HMS viewer ile aynı model yönü (ViewCube + kamera). */
+const previewViewConfig = MODEL_REGISTRY.DEFAULT.viewConfig
 </script>

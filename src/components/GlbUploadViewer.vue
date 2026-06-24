@@ -3,7 +3,6 @@
     <header class="header">
       <div>
         <div class="title">GLB Model Viewer</div>
-        <div class="subtitle">Upload a GLB / glTF file to preview it</div>
       </div>
 
       <div class="controls">
@@ -46,7 +45,7 @@
           @click="showAllParts"
         />
         <Button
-          v-if="isIsolated && partDetailData"
+          v-if="isIsolated && isolatedPartName"
           :label="partDetailPanelOpen ? 'Close detail' : 'Part detail'"
           :severity="partDetailPanelOpen ? undefined : 'secondary'"
           :outlined="!partDetailPanelOpen"
@@ -74,7 +73,7 @@
       <div v-if="fileName" class="fileName">{{ fileName }}</div>
     </div>
 
-    <div class="stage-wrapper" :class="{ 'stage-wrapper-split': isIsolated && partDetailData && partDetailPanelOpen }">
+    <div class="stage-wrapper" :class="{ 'stage-wrapper-split': isIsolated && isolatedPartName && partDetailPanelOpen }">
       <div class="stage" ref="stageRef">
         <canvas ref="canvasEl" class="canvas"></canvas>
 
@@ -107,22 +106,17 @@
           </div>
         </div>
         <div
-          v-if="faultLabelScreen.visible && faultCardData"
+          v-if="faultLabelScreen.visible && faultyPartName"
           class="fault-label-overlay"
           :style="{ left: faultLabelScreen.x + 'px', top: faultLabelScreen.y + 'px' }"
         >
           <div class="fault-label-line"></div>
-          <div class="fault-label-box">
-            <div class="fault-card-row fault-card-fin">FIN# {{ faultCardData.fin }}</div>
-            <div class="fault-card-row"><span class="fault-card-label">Part Name:</span> {{ faultCardData.partName }}</div>
-            <div class="fault-card-row"><span class="fault-card-label">Status:</span> <span class="fault-card-status">{{ faultCardData.status }}</span></div>
-            <div class="fault-card-row fault-card-warnings"><span class="fault-card-label">Warning/Faults:</span> {{ faultCardData.warningFaults }}</div>
-          </div>
+          <div class="fault-label-box">{{ faultyPartName }}</div>
         </div>
       </div>
-      <aside v-if="isIsolated && partDetailData && partDetailPanelOpen" class="part-detail-panel">
+      <aside v-if="isIsolated && isolatedPartName && partDetailPanelOpen" class="part-detail-panel">
         <div class="part-detail-panel-header">
-          <h3 class="part-detail-title">Part Detail</h3>
+          <h3 class="part-detail-title">Part</h3>
           <Button
             icon="pi pi-times"
             severity="secondary"
@@ -132,23 +126,8 @@
             @click="partDetailPanelOpen = false"
           />
         </div>
-        <div class="part-detail-heading">{{ partDetailData.partName }}</div>
-        <dl class="part-detail-list">
-          <dt>Parent Assembly</dt>
-          <dd>{{ partDetailData.parentAssembly }}</dd>
-          <dt>Replacement requirement</dt>
-          <dd>{{ partDetailData.replacementRequirement }}</dd>
-          <dt>Stock status</dt>
-          <dd>{{ partDetailData.stockStatus }}</dd>
-          <dt>ATA chapter</dt>
-          <dd>{{ partDetailData.ataChapter }}</dd>
-          <dt>Lead time</dt>
-          <dd>{{ partDetailData.leadTime }}</dd>
-          <dt>Serial no. range</dt>
-          <dd>{{ partDetailData.serialRange }}</dd>
-          <dt>Remarks</dt>
-          <dd>{{ partDetailData.remarks }}</dd>
-        </dl>
+        <div class="part-detail-heading">{{ isolatedPartName }}</div>
+        <p class="part-detail-hint">glTF node name from the loaded model.</p>
       </aside>
     </div>
   </div>
@@ -164,8 +143,18 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { ViewportGizmo } from 'three-viewport-gizmo'
 import { createViewportGizmo } from '../three/viewportGizmoConfig.js'
 import '../three/viewportGizmo.css'
-import { DEFAULT_VIEW, frameCameraOnBox } from '../three/defaultView.js'
+import { applyModelOrientation, frameCameraOnBox, mergeViewConfig } from '../three/defaultView.js'
 import { observeStageBackground, readStageColor } from '../three/sceneBackground.js'
+
+const props = defineProps({
+  /**
+   * Kamera / ViewCube yönü — HmsViewer ile aynı yapı.
+   * modelRegistry viewConfig veya aircraft.viewConfig buraya verilir.
+   */
+  viewConfig: { type: Object, default: null }
+})
+
+const activeViewConfig = computed(() => mergeViewConfig(props.viewConfig))
 
 // 3D sahne arka planı --stage-bg CSS değişkeninden okunur (ana projenin temasına uyar).
 let disposeStageBg = null
@@ -221,79 +210,6 @@ const allNodeNames = computed(() => {
   return Array.from(set).sort((a, b) => a.localeCompare(b))
 })
 
-const faultCardData = computed(() => {
-  const part = faultyPartName.value
-  if (!part) return null
-  const isEngine = /engine/i.test(part)
-  const isFrontLG = /front\s*lg|nose\s*gear/i.test(part)
-  if (isEngine) {
-    return {
-      fin: '28471',
-      partName: part,
-      status: 'FAULT',
-      warningFaults: 'High TET (Turbine Exit Temp). N2 vibration exceedance. Inspect for FOD / blade damage.'
-    }
-  }
-  if (isFrontLG) {
-    return {
-      fin: '32101',
-      partName: 'Front LG (Front Landing Gear)',
-      status: 'WARNING',
-      warningFaults: 'Sensor fault: position/weight-on-wheels (WOW). Nose gear door/strut position sensor out of tolerance. Calibrate per AMM 32-21-00 or replace sensor P/N 32101-002.'
-    }
-  }
-  return {
-    fin: '-----',
-    partName: part,
-    status: 'WARNING',
-    warningFaults: `Anomaly reported on ${part}. Inspect per AMM.`
-  }
-})
-
-const partDetailData = computed(() => {
-  const part = isolatedPartName.value
-  if (!part) return null
-  const isEngine = /engine/i.test(part)
-  const isLandingGear = /lg|landing|gear/i.test(part)
-  if (isEngine) {
-    return {
-      partName: part,
-      parentAssembly: 'Propulsion module',
-      replacementRequirement: 'On-condition; replace if TET/vibration limits exceeded or FOD confirmed',
-      stockStatus: 'In stock (2 units) — P/N 28471-001',
-      ataChapter: 'ATA 72 — Engine',
-      leadTime: '24–48 hours (local depot)',
-      serialRange: 'SN 28471001 – 28471250',
-      remarks: 'Turbine blade inspection recommended. EASA Form 1 / 8130-3 required.'
-    }
-  }
-  if (isLandingGear) {
-    const isFrontLG = /front\s*lg|nose\s*gear/i.test(part)
-    return {
-      partName: part === 'Front LG' ? 'Front LG (Front Landing Gear)' : part,
-      parentAssembly: isFrontLG ? 'Nose landing gear assembly' : 'Landing gear assembly',
-      replacementRequirement: isFrontLG
-        ? 'Sensor fault: replace or calibrate per AMM 32-21-00. Main gear scheduled per MSG-3.'
-        : 'Scheduled overhaul per MSG-3; replace at wear limit',
-      stockStatus: isFrontLG ? 'Sensor in stock (3 units) — P/N 32101-002. Assembly P/N 32101-001 on order.' : 'In stock (1 unit) — P/N 32101-001, available on order',
-      ataChapter: isFrontLG ? 'ATA 32 — Landing Gear (32-21 Nose Gear)' : 'ATA 32 — Landing Gear',
-      leadTime: isFrontLG ? '5–7 business days (sensor 24–48 h local depot)' : '5–7 business days',
-      serialRange: 'SN 32101001 – 32101200',
-      remarks: 'Oleopneumatic shock absorber check required. Position/WOW sensor calibration for Front LG per AMM 32-21-00.'
-    }
-  }
-  return {
-    partName: part,
-    parentAssembly: 'Aircraft assembly',
-    replacementRequirement: 'On-condition or scheduled per AMM and CMM',
-    stockStatus: 'Supply on request',
-    ataChapter: '—',
-    leadTime: 'Depends on supplier',
-    serialRange: '—',
-    remarks: 'Part number and revision must be verified in AMM.'
-  }
-})
-
 watch(faultyPartName, () => {
   if (!faultyPartName.value) transparentOthers.value = false
   else transparentOthers.value = true
@@ -328,7 +244,8 @@ function initViewportGizmo() {
     camera,
     renderer,
     controls,
-    container
+    container,
+    { swapFrontBack: activeViewConfig.value.swapFrontBack }
   )
 }
 
@@ -615,14 +532,14 @@ function toggleWireframe() {
   setWireframe(!wireframe.value)
 }
 
-function focusToBox(bbox, distanceMultiplier = DEFAULT_VIEW.zoom.fullModel) {
-  frameCameraOnBox(camera, controls, bbox, distanceMultiplier, null, DEFAULT_VIEW)
+function focusToBox(bbox, distanceMultiplier = activeViewConfig.value.zoom.fullModel) {
+  frameCameraOnBox(camera, controls, bbox, distanceMultiplier, modelGroup, activeViewConfig.value)
 }
 
 function resetView() {
   if (!modelGroup || modelGroup.children.length === 0) return
   const bbox = new THREE.Box3().setFromObject(modelGroup)
-  if (!bbox.isEmpty()) focusToBox(bbox, DEFAULT_VIEW.zoom.fullModel)
+  if (!bbox.isEmpty()) focusToBox(bbox, activeViewConfig.value.zoom.fullModel)
 }
 
 let treeIdCounter = 0
@@ -817,13 +734,12 @@ function renderGltf(gltf) {
   })
 
   partNames.value = order.slice().sort((a, b) => a.localeCompare(b))
-  if (partNames.value.includes('Engine')) faultyPartName.value = 'Engine'
-  if (faultyPartName.value) transparentOthers.value = true
+  applyModelOrientation(modelGroup, activeViewConfig.value)
   updateFaultyHighlight()
 
   modelGroup.updateMatrixWorld(true)
   const fitBox = new THREE.Box3().setFromObject(modelGroup)
-  if (!fitBox.isEmpty()) focusToBox(fitBox, DEFAULT_VIEW.zoom.fullModel)
+  if (!fitBox.isEmpty()) focusToBox(fitBox, activeViewConfig.value.zoom.fullModel)
 }
 
 async function onFileChange(event) {
@@ -1046,36 +962,14 @@ onBeforeUnmount(() => {
   font-size: 18px;
   font-weight: 800;
   color: var(--text-primary);
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: 2px solid var(--color-primary-600);
+  margin-bottom: 8px;
 }
 
-.part-detail-list {
+.part-detail-hint {
   margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.part-detail-list dt {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
-  margin: 0 0 2px 0;
-}
-
-.part-detail-list dd {
-  margin: 0 0 4px 0;
   font-size: 13px;
   line-height: 1.5;
-  color: var(--text-primary);
-}
-
-.part-detail-list dd:last-of-type {
-  margin-bottom: 0;
+  color: var(--text-muted);
 }
 
 .stage {
@@ -1113,17 +1007,19 @@ onBeforeUnmount(() => {
   bottom: 52px;
   left: 50%;
   transform: translateX(-50%);
-  min-width: 200px;
+  min-width: 120px;
   max-width: 320px;
-  padding: 12px 16px;
+  padding: 10px 14px;
   background: var(--bg-primary);
   border: 1px solid #dc2626;
   border-radius: 8px;
   box-shadow: 0 4px 16px var(--shadow-color);
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 700;
   color: var(--text-primary);
-  line-height: 1.45;
-  font-family: 'Segoe UI', system-ui, sans-serif;
+  line-height: 1.4;
+  text-align: center;
+  word-break: break-word;
 }
 
 .fault-label-box::after {
@@ -1133,50 +1029,7 @@ onBeforeUnmount(() => {
   left: 50%;
   margin-left: -6px;
   border: 6px solid transparent;
-  border-top-color: #b91c1c;
-}
-
-.fault-card-row {
-  margin-bottom: 6px;
-}
-.fault-card-row:last-child {
-  margin-bottom: 0;
-}
-
-.fault-card-fin {
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.02em;
-  color: #ef4444;
-  border-bottom: 1px solid rgba(220, 38, 38, 0.28);
-  padding-bottom: 6px;
-  margin-bottom: 8px;
-}
-
-.fault-card-label {
-  font-weight: 600;
-  color: var(--text-muted);
-  margin-right: 4px;
-}
-
-.fault-card-status {
-  font-weight: 700;
-  color: #b91c1c;
-  letter-spacing: 0.03em;
-}
-
-.fault-card-warnings {
-  white-space: normal;
-  word-break: break-word;
-  font-size: 11px;
-  color: var(--text-primary);
-  margin-top: 6px;
-  padding-top: 6px;
-  border-top: 1px solid var(--border-color);
-}
-.fault-card-warnings .fault-card-label {
-  display: block;
-  margin-bottom: 2px;
+  border-top-color: #dc2626;
 }
 
 .canvas {

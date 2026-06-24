@@ -3,7 +3,6 @@
     <div class="page-header">
       <div>
         <h1>Aircraft Health Management</h1>
-        <p>Base → Fleet → Aircraft → Flight flight to open the 3D viewer.</p>
       </div>
       <div class="header-actions">
         <Button
