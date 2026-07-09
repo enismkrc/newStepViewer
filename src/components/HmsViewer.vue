@@ -10,7 +10,7 @@
           <Button label="Back" icon="pi pi-arrow-left" severity="secondary" outlined :disabled="!modelLoaded" @click="navigate" />
         </router-link>
         <Button
-          label="Reset view"
+          label="Reset View"
           icon="pi pi-refresh"
           severity="secondary"
           outlined

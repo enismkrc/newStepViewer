@@ -15,7 +15,7 @@
         />
         <Button label="Select file" icon="pi pi-upload" @click="fileInputEl?.click()" />
         <Button
-          label="Reset view"
+          label="Reset View"
           icon="pi pi-refresh"
           severity="secondary"
           outlined
@@ -234,11 +234,16 @@ let isolatedMesh = null
 let viewportGizmo = null
 const gltfLoader = new GLTFLoader()
 
+/** px² — drag above this is treated as orbit, not part pick */
+const CLICK_DRAG_THRESHOLD_SQ = 25
+let pointerDownClient = null
+
 function initViewportGizmo() {
   const container = stageRef.value || canvasEl.value?.parentElement
   if (!camera || !renderer || !controls || !container) return
 
   viewportGizmo?.dispose()
+  if (controls) controls.enabled = true
   viewportGizmo = createViewportGizmo(
     ViewportGizmo,
     camera,
@@ -290,6 +295,8 @@ function initThree() {
   canvas.addEventListener('pointermove', onPointerMove)
   canvas.addEventListener('pointerleave', onPointerLeave)
   canvas.addEventListener('pointerdown', onPointerDown)
+  canvas.addEventListener('pointerup', onPointerUp)
+  canvas.addEventListener('pointercancel', onPointerCancel)
 
   initViewportGizmo()
 
@@ -334,6 +341,11 @@ function loop() {
     }
   } else {
     faultLabelScreen.value = { x: 0, y: 0, visible: false }
+  }
+
+  // ViewCube animasyonu bazen controls.enabled=false bırakır; kurtar.
+  if (controls && viewportGizmo && !viewportGizmo.animating && !controls.enabled) {
+    controls.enabled = true
   }
 
   renderer?.render(scene, camera)
@@ -440,7 +452,12 @@ function clearHover() {
 }
 
 function onPointerLeave() {
+  pointerDownClient = null
   clearHover()
+}
+
+function onPointerCancel() {
+  pointerDownClient = null
 }
 
 function onPointerMove(event) {
@@ -469,13 +486,17 @@ function onPointerMove(event) {
 }
 
 function onPointerDown(event) {
+  if (event.button !== 0) return
+  pointerDownClient = { x: event.clientX, y: event.clientY }
+}
+
+function pickMeshAtClient(clientX, clientY) {
   const canvas = canvasEl.value
-  if (!canvas || !raycaster || !camera || !modelGroup) return
-  if (meshesCount.value === 0) return
+  if (!canvas || !raycaster || !camera || !modelGroup || meshesCount.value === 0) return null
 
   const rect = canvas.getBoundingClientRect()
-  pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
-  pointer.y = -(((event.clientY - rect.top) / rect.height) * 2 - 1)
+  pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1
+  pointer.y = -(((clientY - rect.top) / rect.height) * 2 - 1)
   raycaster.setFromCamera(pointer, camera)
 
   const meshes = []
@@ -483,9 +504,22 @@ function onPointerDown(event) {
     if (obj.isMesh && obj.visible) meshes.push(obj)
   })
   const hits = raycaster.intersectObjects(meshes, false)
-  if (!hits.length) return
+  return hits.length ? hits[0].object : null
+}
 
-  const clicked = hits[0].object
+function onPointerUp(event) {
+  if (event.button !== 0 || !pointerDownClient) return
+
+  const dx = event.clientX - pointerDownClient.x
+  const dy = event.clientY - pointerDownClient.y
+  pointerDownClient = null
+
+  // Sürükleme = orbit; sadece kısa tıklamada parça seç.
+  if (dx * dx + dy * dy > CLICK_DRAG_THRESHOLD_SQ) return
+
+  const clicked = pickMeshAtClient(event.clientX, event.clientY)
+  if (!clicked) return
+
   if (isIsolated.value && clicked === isolatedMesh) {
     showAllParts()
     return
@@ -504,7 +538,7 @@ function isolatePart(mesh) {
   partDetailPanelOpen.value = true
   isIsolated.value = true
   const bbox = new THREE.Box3().setFromObject(mesh)
-  if (!bbox.isEmpty()) focusToBox(bbox, 1.2)
+  if (!bbox.isEmpty()) focusToBox(bbox, activeViewConfig.value.zoom.part)
 }
 
 function showAllParts() {
@@ -785,8 +819,11 @@ onBeforeUnmount(() => {
     canvas.removeEventListener('pointermove', onPointerMove)
     canvas.removeEventListener('pointerleave', onPointerLeave)
     canvas.removeEventListener('pointerdown', onPointerDown)
+    canvas.removeEventListener('pointerup', onPointerUp)
+    canvas.removeEventListener('pointercancel', onPointerCancel)
   }
   viewportGizmo?.dispose()
+  if (controls) controls.enabled = true
   controls?.dispose()
   renderer?.dispose()
   viewportGizmo = null

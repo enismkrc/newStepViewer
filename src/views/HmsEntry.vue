@@ -82,7 +82,7 @@
 
       <div class="open-bar">
         <Button
-          label="Open model viewer"
+          label="Open Model Viewer"
           icon="pi pi-box"
           :disabled="!canOpen"
           fluid
