@@ -13,7 +13,7 @@
 
 <script setup>
 import GlbUploadViewer from '../components/GlbUploadViewer.vue'
-import { MODEL_REGISTRY } from '../config/modelRegistry.js'
+import { MODEL_REGISTRY } from '../config/modelRegistry'
 
 /** GLB preview — HMS viewer ile aynı model yönü (ViewCube + kamera). */
 const previewViewConfig = MODEL_REGISTRY.DEFAULT.viewConfig

@@ -9,41 +9,39 @@
  * BASE_URL boşsa otomatik olarak mock moda düşer (geliştirme kolaylığı).
  */
 
+import type { FetchJsonOptions } from '@/types/api'
+
 export const BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 export const USE_MOCK = import.meta.env.VITE_USE_MOCK_API === 'true' || !BASE_URL
 
 export const MOCK_LATENCY_MS = 400
-export const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+export const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
 /**
  * İsteklere eklenecek ekstra header'lar (örn. Authorization).
  * Gerçek backend'e token/oturum eklemek gerekirse `setAuthToken(...)` çağırın
  * veya `setHeaders({ ... })` ile özel header'lar tanımlayın.
- *
- * Örnek (ana uygulamanın giriş akışından sonra):
- *   import { setAuthToken } from '@/api/client'
- *   setAuthToken(localStorage.getItem('accessToken'))
  */
-let _defaultHeaders = {}
+let _defaultHeaders: Record<string, string> = {}
 
-export function setHeaders(headers = {}) {
+export function setHeaders(headers: Record<string, string> = {}) {
   _defaultHeaders = { ..._defaultHeaders, ...headers }
 }
 
-export function setAuthToken(token) {
+export function setAuthToken(token: string | null | undefined) {
   if (token) _defaultHeaders.Authorization = `Bearer ${token}`
   else delete _defaultHeaders.Authorization
 }
 
 /**
  * Mock statik dosyadan veya gerçek API yolundan JSON getirir.
- * @param {string} mockPath  örn. '/mock-api/lru.json'
- * @param {string} apiPath   örn. '/api/aircraft/aircraft-1/lru'
- * @param {{ query?: Record<string, string>, forceMock?: boolean }} [options]
- *   forceMock=true: global ayar gerçek backend olsa bile bu istek HER ZAMAN mock'tan okur.
- *   (Örn. MFL verisi backend'de hazır olmadığı için mock'tan besleniyor.)
+ * forceMock=true: global ayar gerçek backend olsa bile bu istek HER ZAMAN mock'tan okur.
  */
-export async function fetchJson(mockPath, apiPath, options = {}) {
+export async function fetchJson<T = unknown>(
+  mockPath: string,
+  apiPath: string,
+  options: FetchJsonOptions = {}
+): Promise<T> {
   const { query, forceMock = false } = options
   const useMock = USE_MOCK || forceMock
   let url = useMock ? mockPath : `${BASE_URL}${apiPath}`
@@ -51,11 +49,10 @@ export async function fetchJson(mockPath, apiPath, options = {}) {
     const qs = new URLSearchParams(query).toString()
     url += `${url.includes('?') ? '&' : '?'}${qs}`
   }
-  // Mock dosyaları statik olduğu için header göndermeye gerek yok.
   const init = useMock ? undefined : { headers: { ..._defaultHeaders } }
   const res = await fetch(url, init)
   if (!res.ok) throw new Error(`API error: ${res.status} ${url}`)
-  const data = await res.json()
+  const data = (await res.json()) as T
   if (useMock) await delay(MOCK_LATENCY_MS)
   return data
 }

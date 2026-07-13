@@ -1,5 +1,41 @@
 /** Shared ViewCube settings (HMS + GLB preview). */
-const FACE_STYLE = {
+import type { PerspectiveCamera, WebGLRenderer } from 'three'
+import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import type { ViewportGizmo } from 'three-viewport-gizmo'
+
+interface FaceStyle {
+  color: string
+  opacity: number
+  labelColor: string
+  border: { size: number; color: string }
+  hover: {
+    color: string
+    labelColor: string
+    border: { size: number; color: string }
+  }
+  label?: string
+}
+
+interface GizmoMesh {
+  isMesh?: boolean
+  isSprite?: boolean
+  material?: { opacity: number; transparent: boolean }
+}
+
+interface GizmoInstance {
+  traverse: (callback: (obj: GizmoMesh) => void) => void
+  render: () => unknown
+  dispose: () => void
+  attachControls: (controls: OrbitControls) => void
+}
+
+type ViewportGizmoConstructor = new (
+  camera: PerspectiveCamera,
+  renderer: WebGLRenderer,
+  options: Record<string, unknown>
+) => GizmoInstance
+
+const FACE_STYLE: FaceStyle = {
   color: '#e8edf4',
   opacity: 1,
   labelColor: '#1e293b',
@@ -49,8 +85,7 @@ export function buildViewportGizmoOptions({ swapFrontBack = false } = {}) {
 export const VIEWPORT_GIZMO_CLASS = 'view-cube-widget'
 export const GIZMO_IDLE_OPACITY = 0.3
 
-/** Tüm küpe aynı opaklık — yüz/kenar/köşe ayrı ayrı değil. */
-function applyUniformGizmoOpacity(gizmo, opacity) {
+function applyUniformGizmoOpacity(gizmo: GizmoInstance, opacity: number) {
   gizmo.traverse((obj) => {
     if (!obj.isMesh && !obj.isSprite) return
     const mat = obj.material
@@ -60,7 +95,7 @@ function applyUniformGizmoOpacity(gizmo, opacity) {
   })
 }
 
-function bindGizmoFade(gizmo, container) {
+function bindGizmoFade(gizmo: GizmoInstance, container: HTMLElement) {
   const el = container.querySelector(`.${VIEWPORT_GIZMO_CLASS}`)
   if (!el) return
 
@@ -84,7 +119,6 @@ function bindGizmoFade(gizmo, container) {
   const origRender = gizmo.render.bind(gizmo)
   gizmo.render = () => {
     const result = origRender()
-    // Kütüphane yüz hover'ında parça parça opacity değiştirir; her karede eşitle.
     syncOpacity()
     return result
   }
@@ -99,8 +133,15 @@ function bindGizmoFade(gizmo, container) {
   syncOpacity()
 }
 
-export function createViewportGizmo(ViewportGizmo, camera, renderer, controls, container, gizmoOptions = {}) {
-  const gizmo = new ViewportGizmo(camera, renderer, {
+export function createViewportGizmo(
+  ViewportGizmoClass: ViewportGizmoConstructor,
+  camera: PerspectiveCamera,
+  renderer: WebGLRenderer,
+  controls: OrbitControls,
+  container: HTMLElement,
+  gizmoOptions: { swapFrontBack?: boolean } = {}
+): GizmoInstance {
+  const gizmo = new ViewportGizmoClass(camera, renderer, {
     ...buildViewportGizmoOptions(gizmoOptions),
     className: VIEWPORT_GIZMO_CLASS,
     container
@@ -109,3 +150,5 @@ export function createViewportGizmo(ViewportGizmo, camera, renderer, controls, c
   bindGizmoFade(gizmo, container)
   return gizmo
 }
+
+export type { ViewportGizmo }

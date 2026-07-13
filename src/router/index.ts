@@ -1,6 +1,6 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 
-const routes = [
+const routes: RouteRecordRaw[] = [
   {
     path: '/',
     name: 'Entry',
@@ -22,14 +22,12 @@ const routes = [
 ]
 
 const router = createRouter({
-  // import.meta.env.BASE_URL = vite.config.js içindeki `base` değeri.
-  // Uygulama bir alt yolda sunulursa (örn. /hms/) router otomatik uyumlu olur.
   history: createWebHistory(import.meta.env.BASE_URL),
   routes
 })
 
 router.afterEach((to) => {
-  document.title = to.meta?.title ? `${to.meta.title} | HMS` : 'HMS'
+  document.title = to.meta?.title ? `${String(to.meta.title)} | HMS` : 'HMS'
 })
 
 export default router

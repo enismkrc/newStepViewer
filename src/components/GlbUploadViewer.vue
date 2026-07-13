@@ -141,10 +141,10 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { ViewportGizmo } from 'three-viewport-gizmo'
-import { createViewportGizmo } from '../three/viewportGizmoConfig.js'
+import { createViewportGizmo } from '../three/viewportGizmoConfig'
 import '../three/viewportGizmo.css'
-import { applyModelOrientation, frameCameraOnBox, mergeViewConfig } from '../three/defaultView.js'
-import { observeStageBackground, readStageColor } from '../three/sceneBackground.js'
+import { applyModelOrientation, frameCameraOnBox, mergeViewConfig } from '../three/defaultView'
+import { observeStageBackground, readStageColor } from '../three/sceneBackground'
 
 const props = defineProps({
   /**

@@ -1,18 +1,19 @@
 import * as THREE from 'three'
+import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import type { ViewConfig, ViewConfigPartial } from '@/types/view'
 
 /**
  * Generic defaults — glTF Y-up, no model rotation, standard isometric camera.
  * Per-aircraft overrides: mock API `viewConfig` (see aircraft.json).
  */
-export const DEFAULT_VIEW = {
+export const DEFAULT_VIEW: ViewConfig = {
   modelRotation: { x: 0, y: 0, z: 0 },
   cameraOffset: { x: 0.85, y: 0.65, z: 0.85 },
   zoom: { fullModel: 0.5, part: 1.2, assembly: 1.5 },
-  /** true when model nose points -Z (ViewCube FRONT/BACK labels swap). */
   swapFrontBack: false
 }
 
-export function mergeViewConfig(override) {
+export function mergeViewConfig(override?: ViewConfigPartial | null): ViewConfig {
   if (!override || typeof override !== 'object') {
     return {
       modelRotation: { ...DEFAULT_VIEW.modelRotation },
@@ -31,13 +32,20 @@ export function mergeViewConfig(override) {
 
 const _cameraOffsetVec = new THREE.Vector3()
 
-export function applyModelOrientation(group, viewConfig = DEFAULT_VIEW) {
+export function applyModelOrientation(group: THREE.Object3D | null, viewConfig: ViewConfig = DEFAULT_VIEW) {
   if (!group) return
   const r = viewConfig.modelRotation
   group.rotation.set(r.x ?? 0, r.y ?? 0, r.z ?? 0)
 }
 
-export function frameCameraOnBox(camera, controls, bbox, distanceMultiplier, modelGroup, viewConfig = DEFAULT_VIEW) {
+export function frameCameraOnBox(
+  camera: THREE.PerspectiveCamera | null,
+  controls: OrbitControls | null,
+  bbox: THREE.Box3 | null,
+  distanceMultiplier: number,
+  modelGroup: THREE.Object3D | null,
+  viewConfig: ViewConfig = DEFAULT_VIEW
+) {
   if (!camera || !controls || !bbox) return
 
   const center = new THREE.Vector3()
