@@ -36,8 +36,10 @@ export async function fetchJson<T = unknown>(
 
 /** Mock dosyaları statiktir: ortak istemcinin baseURL/header'ları uygulanmamalı. */
 async function fetchMockJson<T>(mockPath: string): Promise<T> {
-  const res = await fetch(mockPath)
-  if (!res.ok) throw new Error(`Mock API error: ${res.status} ${mockPath}`)
+  // Vite `base` ayarı (alt yolda yayın) altında public/ dosyaları da o yola taşınır.
+  const url = `${import.meta.env.BASE_URL}${mockPath.replace(/^\//, '')}`
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`Mock API error: ${res.status} ${url}`)
   const data = (await res.json()) as T
   await delay(MOCK_LATENCY_MS)
   return data
