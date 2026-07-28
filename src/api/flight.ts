@@ -2,8 +2,8 @@
  * Flight API.
  */
 
-import { fetchJson } from './client'
-import type { Flight } from '@/types/api'
+import { fetchJson } from './hms-client'
+import type { Flight } from '@/types/api-types'
 
 const MOCK_FLIGHTS = '/mock-api/flights-by-aircraft.json'
 

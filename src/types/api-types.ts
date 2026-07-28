@@ -1,4 +1,4 @@
-import type { ViewConfigPartial } from './view'
+import type { ViewConfigPartial } from './view-types'
 
 export interface Fleet {
   id: string

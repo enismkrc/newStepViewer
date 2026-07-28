@@ -2,8 +2,8 @@
  * MODEL REGISTRY — Uçak → 3D model (GLB/glTF) eşlemesi
  */
 
-import type { Aircraft } from '@/types/api'
-import type { ViewConfig, ViewConfigPartial } from '@/types/view'
+import type { Aircraft } from '@/types/api-types'
+import type { ViewConfig, ViewConfigPartial } from '@/types/view-types'
 
 export interface ModelEntry {
   modelUrl: string

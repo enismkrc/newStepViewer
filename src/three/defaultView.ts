@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import type { ViewConfig, ViewConfigPartial } from '@/types/view'
+import type { ViewConfig, ViewConfigPartial } from '@/types/view-types'
 
 /**
  * Generic defaults — glTF Y-up, no model rotation, standard isometric camera.

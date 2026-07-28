@@ -2,8 +2,8 @@
  * Aircraft API service layer (legacy flat list endpoint).
  */
 
-import { fetchJson } from './client'
-import type { Aircraft } from '@/types/api'
+import { fetchJson } from './hms-client'
+import type { Aircraft } from '@/types/api-types'
 
 const MOCK_URL = '/mock-api/aircraft.json'
 

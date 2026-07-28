@@ -2,8 +2,8 @@
  * LRU (Line Replaceable Unit) API.
  */
 
-import { fetchJson } from './client'
-import type { LruRecord } from '@/types/api'
+import { fetchJson } from './hms-client'
+import type { LruRecord } from '@/types/api-types'
 
 const MOCK_URL = '/mock-api/lru.json'
 

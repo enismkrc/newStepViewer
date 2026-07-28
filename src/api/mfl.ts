@@ -5,8 +5,8 @@
  * mock'tan okunur. (forceMock=true)
  */
 
-import { fetchJson } from './client'
-import type { Fault, MflRecord, NormalizedMflRecord } from '@/types/api'
+import { fetchJson } from './hms-client'
+import type { Fault, MflRecord, NormalizedMflRecord } from '@/types/api-types'
 
 const MOCK_MFL_BY_FLIGHT = '/mock-api/mfl-by-flight.json'
 

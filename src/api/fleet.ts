@@ -5,9 +5,9 @@
  * src/config/modelRegistry.ts üzerinden MANUEL ekleniyor.
  */
 
-import { fetchJson } from './client'
+import { fetchJson } from './hms-client'
 import { attachModel } from '@/config/modelRegistry'
-import type { Aircraft, Fleet, Page } from '@/types/api'
+import type { Aircraft, Fleet, Page } from '@/types/api-types'
 
 const MOCK_FLEETS = '/mock-api/fleets-page.json'
 const MOCK_AIRCRAFT_BY_FLEET = '/mock-api/aircraft-by-fleet.json'
