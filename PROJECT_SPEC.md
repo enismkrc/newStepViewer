@@ -1,6 +1,10 @@
-# 3D STEP Model Viewer – Proje Özeti ve Teknik Spesifikasyon
+# 3D Model Viewer – Proje Özeti ve Teknik Spesifikasyon
 
-Bu belge, **sıfırdan** geliştirilen **tek sayfalık 3D CAD model görüntüleyici** uygulamasının amacını, kapsamını ve teknik gereksinimlerini tanımlar. Uygulama, kullanıcının STEP/IGES/BREP dosyalarını yükleyip 3D olarak görüntülemesine, parçalar üzerinde hover ile vurgulama yapmasına ve tıklayarak tek parça izolasyonuna olanak tanır.
+> **Güncelleme (GLB geçişi):** Proje artık STEP→JSON dönüştürme yerine **GLB (binary glTF)**
+> dosyalarını doğrudan Three.js `GLTFLoader` ile yüklemektedir. `occt-import-js` bağımlılığı
+> kaldırılmıştır. Aşağıdaki orijinal STEP/occt notları tarihsel referans amaçlı korunmuştur.
+
+Bu belge, **sıfırdan** geliştirilen **tek sayfalık 3D CAD model görüntüleyici** uygulamasının amacını, kapsamını ve teknik gereksinimlerini tanımlar. Uygulama, kullanıcının 3D modelleri yükleyip görüntülemesine, parçalar üzerinde hover ile vurgulama yapmasına ve tıklayarak tek parça izolasyonuna olanak tanır.
 
 ---
 
@@ -16,7 +20,7 @@ Bu belge, **sıfırdan** geliştirilen **tek sayfalık 3D CAD model görüntüle
 - **Frontend:** Vue 3 (Composition API, `<script setup>`)
 - **Build:** Vite
 - **3D motor:** Three.js (sahne, kamera, WebGL renderer, OrbitControls)
-- **CAD import:** occt-import-js (tarayıcıda STEP/IGES/BREP → mesh; WASM tabanlı)
+- **Model import:** Three.js `GLTFLoader` (GLB/glTF dosyalarını native yükleme)
 - **Dil:** JavaScript (ES modules)
 
 ---

@@ -1,6 +1,6 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 
-const routes = [
+const routes: RouteRecordRaw[] = [
   {
     path: '/',
     name: 'Entry',
@@ -8,7 +8,7 @@ const routes = [
     meta: { title: 'Aircraft Selection' }
   },
   {
-    path: '/view/:aircraftId',
+    path: '/view/:aircraftId/:flightId',
     name: 'View',
     component: () => import('../views/HmsViewerPage.vue'),
     meta: { title: 'Model View' }
@@ -17,17 +17,17 @@ const routes = [
     path: '/import',
     name: 'Import',
     component: () => import('../views/ImportTool.vue'),
-    meta: { title: 'Model Import & Conversion' }
+    meta: { title: 'GLB Preview' }
   }
 ]
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes
 })
 
 router.afterEach((to) => {
-  document.title = to.meta?.title ? `${to.meta.title} | HMS` : 'HMS'
+  document.title = to.meta?.title ? `${String(to.meta.title)} | HMS` : 'HMS'
 })
 
 export default router

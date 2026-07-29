@@ -1,0 +1,39 @@
+{
+  "_comment": "Backend'in gerçek yanıt şekli: modelUrl/viewConfig YOK. Bunlar src/config/modelRegistry.js içinde aircraftModel'e göre eşlenir.",
+  "fleet-1": [
+    {
+      "id": "aircraft-1",
+      "aircraftModel": "KF-21",
+      "name": "KF-21 Boramae 01",
+      "tailNumber": "KF-21-01"
+    },
+    {
+      "id": "aircraft-2",
+      "aircraftModel": "KF-21",
+      "name": "KF-21 Boramae 02",
+      "tailNumber": "KF-21-02"
+    }
+  ],
+  "fleet-2": [
+    {
+      "id": "aircraft-3",
+      "aircraftModel": "KF-21",
+      "name": "KF-21 Boramae 03",
+      "tailNumber": "KF-21-03"
+    }
+  ],
+  "fleet-3": [
+    {
+      "id": "aircraft-5",
+      "aircraftModel": "KF-21",
+      "name": "KF-21 Boramae 05",
+      "tailNumber": "KF-21-05"
+    },
+    {
+      "id": "aircraft-6",
+      "aircraftModel": "KF-21",
+      "name": "KF-21 Boramae 06",
+      "tailNumber": "KF-21-06"
+    }
+  ]
+}

@@ -1,0 +1,107 @@
+{
+  "aircraft-1": [
+    {
+      "part": "Left engine",
+      "MFL_Id": "MFL-2026-00142",
+      "MFL_Field_Name": "ENG_TET_HIGH",
+      "MFL_Description": "Left engine turbine exit temperature exceedance",
+      "MFL_Absulut_time": "2026-06-10T14:32:18Z",
+      "MFL_Relative_Time": "T+00:12:45",
+      "Fault_Code": "72-001",
+      "Severity": "FAULT",
+      "Description": "TET above limit for 8 consecutive seconds. N2 vibration secondary alert active."
+    },
+    {
+      "part": "Left engine",
+      "MFL_Id": "MFL-2026-00143",
+      "MFL_Field_Name": "ENG_N2_VIB",
+      "MFL_Description": "Left engine N2 vibration exceedance",
+      "MFL_Absulut_time": "2026-06-10T14:32:20Z",
+      "MFL_Relative_Time": "T+00:12:47",
+      "Fault_Code": "72-014",
+      "Severity": "FAULT",
+      "Description": "N2 vibration peak 1.8x threshold. Recommend borescope inspection."
+    },
+    {
+      "part": "Landing gear",
+      "MFL_Id": "MFL-2026-00158",
+      "MFL_Field_Name": "LG_WOW_SENSOR",
+      "MFL_Description": "Weight-on-wheels sensor out of tolerance",
+      "MFL_Absulut_time": "2026-06-10T13:05:02Z",
+      "MFL_Relative_Time": "T+00:00:00",
+      "Fault_Code": "32-021",
+      "Severity": "FAULT",
+      "Description": "WOW sensor reading inconsistent with gear position. Calibrate or replace per AMM 32-21-00."
+    },
+    {
+      "part": "R_Rudder",
+      "MFL_Id": "MFL-2026-00161",
+      "MFL_Field_Name": "RUD_ACT_FB",
+      "MFL_Description": "Right rudder actuator feedback drift",
+      "MFL_Absulut_time": "2026-06-10T15:18:44Z",
+      "MFL_Relative_Time": "T+01:26:42",
+      "Fault_Code": "27-204",
+      "Severity": "FAULT",
+      "Description": "Actuator position feedback delta 4.2° from command. Inspect harness and LRU."
+    },
+    {
+      "part": "L_Flaperon",
+      "MFL_Id": "MFL-2026-00172",
+      "MFL_Field_Name": "FLP_ACT_POS",
+      "MFL_Description": "Left flaperon actuator position fault",
+      "MFL_Absulut_time": "2026-06-10T16:02:11Z",
+      "MFL_Relative_Time": "T+02:10:09",
+      "Fault_Code": "27-105",
+      "Severity": "FAULT",
+      "Description": "Flaperon position feedback out of range. Possible hydraulic leak or electrical fault."
+    },
+    {
+      "part": "Cockpit",
+      "MFL_Id": "MFL-2026-00189",
+      "MFL_Field_Name": "CDU_BIT_FAIL",
+      "MFL_Description": "Cockpit display built-in test failure",
+      "MFL_Absulut_time": "2026-06-10T11:44:30Z",
+      "MFL_Relative_Time": "T-02:07:30",
+      "Fault_Code": "31-002",
+      "Severity": "FAULT",
+      "Description": "Display unit BIT intermittent. Check power and avionics bus connectors."
+    },
+    {
+      "part": "IRIS-T003",
+      "MFL_Id": "MFL-2026-00201",
+      "MFL_Field_Name": "STORE_NO_RESP",
+      "MFL_Description": "IRIS-T store interface no response",
+      "MFL_Absulut_time": "2026-06-10T17:55:03Z",
+      "MFL_Relative_Time": "T+04:03:01",
+      "Fault_Code": "94-001",
+      "Severity": "FAULT",
+      "Description": "Store self-test failed. No response on pylon data bus."
+    }
+  ],
+  "aircraft-2": [
+    {
+      "part": "Nose Landing gear",
+      "MFL_Id": "MFL-2026-00215",
+      "MFL_Field_Name": "NOSE_LG_WOW",
+      "MFL_Description": "Nose gear WOW sensor fault",
+      "MFL_Absulut_time": "2026-06-09T09:12:00Z",
+      "MFL_Relative_Time": "T+00:00:00",
+      "Fault_Code": "32-021",
+      "Severity": "FAULT",
+      "Description": "Nose gear position/WOW sensor out of tolerance during ground ops."
+    }
+  ],
+  "aircraft-5": [
+    {
+      "part": "Right engine",
+      "MFL_Id": "MFL-2026-00228",
+      "MFL_Field_Name": "ENG_TET_HIGH",
+      "MFL_Description": "Right engine turbine exit temperature exceedance",
+      "MFL_Absulut_time": "2026-06-11T08:20:15Z",
+      "MFL_Relative_Time": "T+00:08:12",
+      "Fault_Code": "72-001",
+      "Severity": "FAULT",
+      "Description": "Right engine TET above limit. Inspect for FOD and blade damage."
+    }
+  ]
+}

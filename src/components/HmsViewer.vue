@@ -2,23 +2,51 @@
   <div class="page">
     <header class="header">
       <div>
-        <div class="title">Model view</div>
+        <div class="title">Model View</div>
       </div>
 
       <div class="controls">
-        <button class="btn" :disabled="!modelLoaded" @click="resetView">Reset view</button>
-        <button class="btn" :disabled="!modelLoaded" @click="toggleWireframe">
-          {{ wireframe ? 'Solid' : 'Wireframe' }}
-        </button>
-        <button v-if="modelLoaded && hasFaults" type="button" class="btn btn-panel-toggle" :class="{ active: transparentOthers }" @click="transparentOthers = !transparentOthers">
-          {{ transparentOthers ? 'Others opaque' : 'Others transparent' }}
-        </button>
-        <button v-if="isIsolated || isDetailView" class="btn btn-back" @click="showAllParts">
-          ← Show all
-        </button>
-        <button v-if="isIsolated && partDetailData" type="button" class="btn btn-panel-toggle" :class="{ active: partDetailPanelOpen }" @click="partDetailPanelOpen = !partDetailPanelOpen">
-          {{ partDetailPanelOpen ? 'Close detail' : 'Part detail' }}
-        </button>
+        <router-link :to="{ name: 'Entry' }" custom v-slot="{ navigate }">
+          <Button label="Back to selection" icon="pi pi-arrow-left" severity="secondary" outlined :disabled="!modelLoaded" @click="navigate" />
+        </router-link>
+        <Button
+          label="Reset View"
+          icon="pi pi-refresh"
+          severity="secondary"
+          outlined
+          :disabled="!modelLoaded"
+          @click="resetView"
+        />
+        <Button
+          :label="wireframe ? 'Solid' : 'Wireframe'"
+          icon="pi pi-th-large"
+          severity="secondary"
+          outlined
+          :disabled="!modelLoaded"
+          @click="toggleWireframe"
+        />
+        <Button
+          v-if="modelLoaded && hasFaults"
+          :label="transparentOthers ? 'Opaque' : 'Transparent'"
+          :severity="transparentOthers ? undefined : 'secondary'"
+          :outlined="!transparentOthers"
+          icon="pi pi-eye"
+          @click="transparentOthers = !transparentOthers"
+        />
+        <Button
+          v-if="isIsolated || isDetailView"
+          label="Back to model"
+          icon="pi pi-arrow-left"
+          @click="showAllParts"
+        />
+        <Button
+          v-if="isIsolated && isolatedName"
+          :label="partDetailPanelOpen ? 'Close detail' : 'Part detail'"
+          :severity="partDetailPanelOpen ? undefined : 'secondary'"
+          :outlined="!partDetailPanelOpen"
+          icon="pi pi-info-circle"
+          @click="partDetailPanelOpen = !partDetailPanelOpen"
+        />
       </div>
     </header>
 
@@ -27,7 +55,7 @@
       <div v-if="errorText" class="errorText">{{ errorText }}</div>
     </div>
 
-    <div class="stage-wrapper" :class="{ 'stage-wrapper-split': isIsolated && partDetailData && partDetailPanelOpen }">
+    <div class="stage-wrapper" :class="{ 'stage-wrapper-split': isIsolated && isolatedName && partDetailPanelOpen }">
       <div class="stage" ref="stageRef">
         <canvas ref="canvasEl" class="canvas"></canvas>
         <button
@@ -51,9 +79,9 @@
           <div class="fault-label-line"></div>
           <div class="fault-label-box">
             <div class="fault-card-row fault-card-fin">FIN# {{ activeFaultLabel.card.fin }}</div>
-            <div class="fault-card-row"><span class="fault-card-label">Part Name:</span> {{ activeFaultLabel.card.partName }}</div>
-            <div class="fault-card-row"><span class="fault-card-label">Status:</span> <span class="fault-card-status">{{ activeFaultLabel.card.status }}</span></div>
-            <div class="fault-card-row fault-card-warnings"><span class="fault-card-label">Warning/Faults:</span> {{ activeFaultLabel.card.warningFaults }}</div>
+            <div class="fault-card-row"><span class="fault-card-label">Part:</span> {{ activeFaultLabel.card.lruName }}</div>
+            <div class="fault-card-row"><span class="fault-card-label">MFL Id:</span> {{ activeFaultLabel.card.mflId }}</div>
+            <div class="fault-card-row fault-card-desc"><span class="fault-card-label">Description:</span> {{ activeFaultLabel.card.description }}</div>
           </div>
         </div>
         <div v-if="hasFaults && !isIsolated" class="fault-list-panel">
@@ -69,49 +97,72 @@
               @click="focusFault(f.id)"
             >
               <span class="fault-list-num">{{ i + 1 }}</span>
-              <span class="fault-list-name">{{ f.card.partName }}</span>
-              <span class="fault-list-status" :class="statusClass(f.card.status)">{{ f.card.status }}</span>
+              <span class="fault-list-name">{{ f.card.lruName }}</span>
+              <span class="fault-list-mfl">{{ f.card.mflId }}</span>
             </li>
           </ul>
         </div>
       </div>
-      <aside v-if="isIsolated && partDetailPanelOpen && (isolatedMarkerData || partDetailData)" class="part-detail-panel">
+      <aside v-if="isIsolated && partDetailPanelOpen && isolatedName" class="part-detail-panel">
         <div class="part-detail-panel-header">
-          <h3 class="part-detail-title">{{ isolatedMarkerData ? 'Fault Detail' : 'Part Detail' }}</h3>
-          <button type="button" class="part-detail-close" aria-label="Close" @click="partDetailPanelOpen = false">×</button>
+          <h3 class="part-detail-title">Part Detail</h3>
+          <Button
+            icon="pi pi-times"
+            severity="secondary"
+            text
+            rounded
+            aria-label="Close"
+            @click="partDetailPanelOpen = false"
+          />
         </div>
-        <template v-if="isolatedMarkerData">
-          <div class="part-detail-heading">{{ markerDetailData.partName }}</div>
+        <div class="part-detail-heading">{{ isolatedName }}</div>
+
+        <dl v-if="activeFaultSummary" class="part-detail-list">
+          <dt>FIN</dt>
+          <dd>{{ activeFaultSummary.fin }}</dd>
+          <dt>Part</dt>
+          <dd>{{ activeFaultSummary.lruName }}</dd>
+          <dt>Fault Code</dt>
+          <dd>{{ activeFaultSummary.mflId }}</dd>
+          <dt>Description</dt>
+          <dd>{{ activeFaultSummary.description }}</dd>
+        </dl>
+
+        <div v-if="activeLru" class="detail-section">
+          <h4 class="detail-section-title">LRU</h4>
           <dl class="part-detail-list">
-            <dt>FIN</dt>
-            <dd>{{ markerDetailData.fin }}</dd>
-            <dt>Status</dt>
-            <dd><span class="detail-status" :class="statusClass(markerDetailData.status)">{{ markerDetailData.status }}</span></dd>
-            <dt>Warning/Faults</dt>
-            <dd>{{ markerDetailData.warningFaults }}</dd>
-            <dt>Coordinate (X, Y, Z)</dt>
-            <dd>{{ markerDetailData.coordinate }}</dd>
+            <dt>LRU Instance Name</dt>
+            <dd>{{ activeLru.LRU_Instance_Name }}</dd>
+            <dt>LRU Serial No.</dt>
+            <dd>{{ activeLru.LRU_Serial_No }}</dd>
           </dl>
-        </template>
-        <template v-else>
-          <div class="part-detail-heading">{{ partDetailData.partName }}</div>
-          <dl class="part-detail-list">
-            <dt>Parent Assembly</dt>
-            <dd>{{ partDetailData.parentAssembly }}</dd>
-            <dt>Replacement requirement</dt>
-            <dd>{{ partDetailData.replacementRequirement }}</dd>
-            <dt>Stock status</dt>
-            <dd>{{ partDetailData.stockStatus }}</dd>
-            <dt>ATA chapter</dt>
-            <dd>{{ partDetailData.ataChapter }}</dd>
-            <dt>Lead time</dt>
-            <dd>{{ partDetailData.leadTime }}</dd>
-            <dt>Serial no. range</dt>
-            <dd>{{ partDetailData.serialRange }}</dd>
-            <dt>Remarks</dt>
-            <dd>{{ partDetailData.remarks }}</dd>
-          </dl>
-        </template>
+        </div>
+
+        <div v-if="activeMflList.length" class="detail-section">
+          <h4 class="detail-section-title">MFL ({{ activeMflList.length }})</h4>
+          <div v-for="m in activeMflList" :key="m.MFL_Id" class="mfl-block">
+            <dl class="part-detail-list">
+              <dt>MFL Id</dt>
+              <dd>{{ m.MFL_Id }}</dd>
+              <dt>Field Name</dt>
+              <dd>{{ m.MFL_Field_Name }}</dd>
+              <dt>Description</dt>
+              <dd>{{ m.MFL_Description }}</dd>
+              <dt>Absolute Time</dt>
+              <dd>{{ m.MFL_Absulut_time }}</dd>
+              <dt>Relative Time</dt>
+              <dd>{{ m.MFL_Relative_Time }}</dd>
+              <dt>Category</dt>
+              <dd>{{ m.Category || '—' }}</dd>
+              <dt>Fault Code</dt>
+              <dd>{{ m.Fault_Code }}</dd>
+              <dt>Severity</dt>
+              <dd><span class="detail-status" :class="statusClass(m.Severity)">{{ m.Severity }}</span></dd>
+              <dt>Detail</dt>
+              <dd>{{ m.Description }}</dd>
+            </dl>
+          </div>
+        </div>
       </aside>
     </div>
   </div>
@@ -119,21 +170,31 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import Button from 'primevue/button'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
+import { ViewportGizmo } from 'three-viewport-gizmo'
+import { createViewportGizmo } from '../three/viewportGizmoConfig'
+import '../three/viewportGizmo.css'
+import { mergeViewConfig, applyModelOrientation, frameCameraOnBox } from '../three/defaultView'
+import { observeStageBackground, readStageColor } from '../three/sceneBackground'
+
+// 3D sahne arka planı --stage-bg CSS değişkeninden okunur (ana projenin temasına uyar).
+let disposeStageBg = null
 
 /**
  * HMS (Health Management System) viewer (Three.js)
  *
  * Main responsibilities:
- * - Load a JSON mesh bundle from `modelUrl` (exported by the OCCT import tool).
- * - Highlight the "faulty" part in red. The faulty part name comes from `props.faultyPart`,
- *   which is set by the selected aircraft record (see `src/data/aircraft.js`).
+ * - Load a GLB/glTF model from `modelUrl` (binary glTF, loaded natively by Three.js).
+ * - Highlight faulty parts from API `faults[]` (part names must match glTF node names).
  * - Allow interaction: hover highlight, click to isolate a part and zoom camera to it.
  * - Optional: if `detailModelUrl` is provided, clicking the faulty part can switch to a deeper/detail model.
  */
 const props = defineProps({
-  modelUrl: { type: String, default: '/F35_converted.json' },
+  modelUrl: { type: String, default: '' },
   /**
    * Name of the part that should be treated as "faulty" and highlighted in red.
    * This is passed from the parent page (selected aircraft).
@@ -152,22 +213,24 @@ const props = defineProps({
    */
   detailFaultyPart: { type: String, default: null },
   /**
-   * Optional: a list of coordinate-based fault markers.
-   *
-   * Instead of matching faults to existing parts by name, we place a small cube at
-   * each given coordinate (e.g. the locations of LRUs/systems reported by an external
-   * source such as an MFL list). Each cube is highlighted in red and gets its own
-   * fault overlay card (arrow + info) pointing to it.
-   *
-   * Each item shape:
-   * {
-   *   position: { x, y, z },   // absolute coordinate in the model's space
-   *   size: number,            // optional cube edge length (auto-sized if omitted)
-   *   fin, partName, status, warningFaults  // fault overlay card content
-   * }
+   * Optional: multiple faults for one aircraft. Each item:
+   * { part: string, type?: string, fin?: string, status?: string, warningFaults?: string }
+   * `part` may be a leaf part OR an assembly name (whole assembly highlights red).
+   * When provided, this takes precedence over the single `faultyPart`/`faultType`.
    */
-  faultMarkers: { type: Array, default: () => [] }
+  faults: { type: Array, default: () => [] },
+  /** LRU records for this aircraft (from API). Linked to parts via `part` field. */
+  lruList: { type: Array, default: () => [] },
+  /** MFL records for this aircraft (from API). Linked to parts via `part` field. */
+  mflList: { type: Array, default: () => [] },
+  /**
+   * Optional per-aircraft viewer tuning (from API / mock JSON).
+   * { modelRotation?: {x,y,z}, cameraOffset?: {x,y,z}, zoom?: {...}, swapFrontBack?: boolean }
+   */
+  viewConfig: { type: Object, default: null }
 })
+
+const activeViewConfig = computed(() => mergeViewConfig(props.viewConfig))
 
 const canvasEl = ref(null)
 const statusText = ref('Loading model...')
@@ -178,17 +241,20 @@ const modelLoaded = computed(() => meshesCount.value > 0)
 const meshesCount = ref(0)
 const isIsolated = ref(false)
 const isolatedPartName = ref('')
-// When the isolated object is a coordinate-based fault marker, its data is kept here
-// so the detail panel can show fault-specific info instead of generic part info.
-const isolatedMarkerData = ref(null)
+// Name of the part/assembly currently isolated. For a faulty assembly this is the
+// assembly name (the whole unit is isolated, not an individual sub-part).
+const isolatedName = ref('')
 const partDetailPanelOpen = ref(false)
 const partNames = ref([])
-const faultyPartName = ref(props.faultyPart ?? '')
-const lastImportResult = ref(null)
 const stageRef = ref(null)
 const transparentOthers = ref(false)
 const isDetailView = ref(false)
-// Screen-space overlay labels for every fault (named part + coordinate markers).
+// When a detail model is loaded, this holds the single faulty part name inside it.
+const detailFaultName = ref('')
+// While a part is being inspected the 3D view is read-only: clicking a part (or any of
+// its sub-parts) must not change the view. "Back to model" is the only way out.
+const viewOnly = computed(() => isIsolated.value || isDetailView.value)
+// Screen-space overlay labels for every fault (named parts).
 // Each: { id, num, x, y, card: { fin, partName, status, warningFaults } }
 const faultLabels = ref([])
 // Which fault's detail card to show. Purely hover-driven: a card is shown only while
@@ -198,30 +264,45 @@ const hoveredFaultId = ref(null)
 const shownFaultId = computed(() => hoveredFaultId.value)
 
 /**
- * Unified fault list: combines an optional named-part fault (`faultyPart`) and any
- * coordinate-based markers (`faultMarkers`) into one numbered list. This drives the
- * side list panel, the numbered pins, and the hover detail cards for ALL aircraft.
+ * Normalized list of fault definitions for the current aircraft. Supports either the
+ * multi-fault `faults` array or the single `faultyPart`/`faultType` props.
+ */
+const faultDefs = computed(() => {
+  const raw = (Array.isArray(props.faults) && props.faults.length)
+    ? props.faults
+    : (props.faultyPart ? [{ part: props.faultyPart, type: props.faultType }] : [])
+  // De-duplicate by part name while preserving order.
+  const seen = new Set()
+  const out = []
+  for (const f of raw) {
+    if (!f || !f.part || seen.has(f.part)) continue
+    seen.add(f.part)
+    out.push({ part: f.part, type: f.type ?? null, fin: f.fin, status: f.status, warningFaults: f.warningFaults })
+  }
+  return out
+})
+
+// Names of the parts/assemblies that should be highlighted red right now.
+const activeFaultNames = computed(() => {
+  if (isDetailView.value) return detailFaultName.value ? [detailFaultName.value] : []
+  return faultDefs.value.map((f) => f.part)
+})
+
+/**
+ * Fault list driving the side panel, the numbered pins and the hover detail cards.
+ * Faults are always tied to a real, named part/assembly inside the model.
  */
 const faultEntries = computed(() => {
-  const entries = []
-  if (faultyPartName.value) {
-    entries.push({
-      id: 'part:' + faultyPartName.value,
-      kind: 'part',
-      partName: faultyPartName.value,
-      card: faultCardData.value
-    })
+  if (isDetailView.value) {
+    return detailFaultName.value
+      ? [{ id: 'part:' + detailFaultName.value, partName: detailFaultName.value, card: makeFaultCard(detailFaultName.value, null) }]
+      : []
   }
-  const markers = Array.isArray(props.faultMarkers) ? props.faultMarkers : []
-  markers.forEach((m, i) => {
-    entries.push({
-      id: 'marker:' + i,
-      kind: 'marker',
-      markerIndex: i,
-      card: markerCardData(m)
-    })
-  })
-  return entries
+  return faultDefs.value.map((f) => ({
+    id: 'part:' + f.part,
+    partName: f.part,
+    card: makeFaultCard(f.part, f.type, f)
+  }))
 })
 
 const hasFaults = computed(() => faultEntries.value.length > 0)
@@ -237,130 +318,47 @@ function statusClass(status) {
   return /fault/i.test(status || '') ? 'is-fault' : 'is-warning'
 }
 
-// Detail-panel content for an isolated coordinate-based fault marker.
-const markerDetailData = computed(() => {
-  const m = isolatedMarkerData.value
-  if (!m) return null
-  const card = markerCardData(m)
-  const p = m.position || {}
-  const fmt = (v) => (typeof v === 'number' ? Math.round(v) : '—')
-  return {
-    ...card,
-    coordinate: `${fmt(p.x)}, ${fmt(p.y)}, ${fmt(p.z)}`
-  }
-})
-
-const faultCardData = computed(() => {
-  // Overlay label content for the faulty part (demo data).
-  // This is derived from `faultyPartName` (current faulty part name in the loaded model).
-  const part = faultyPartName.value
+/**
+ * Build a compact fault summary card from aircraft fault + LRU/MFL API data.
+ * Shown on hover (pin / list row). Full detail is in the part detail panel.
+ */
+function makeFaultCard(part, type, override = {}) {
   if (!part) return null
-  const isFrontLG = part === 'Front LG' || /front\s*lg|nose\s*gear/i.test(part)
-  const isFrontLGSensor = part === 'Front LG' && props.faultType === 'SENSOR'
-  const isEngine = /engine/i.test(part)
-  if (isFrontLG) {
-    return {
-      fin: '32101',
-      partName: 'Front LG (Front Landing Gear)',
-      status: isFrontLGSensor ? 'WARNING' : 'WARNING',
-      warningFaults: isFrontLGSensor
-        ? 'Sensor fault: position/weight-on-wheels (WOW). Nose gear door/strut position sensor out of tolerance. Calibrate per AMM 32-21-00 or replace sensor P/N 32101-002.'
-        : 'Anomaly reported on Front Landing Gear. ATA 32-21. Inspect per AMM 32-00-00.'
-    }
-  }
-  const isCentralMountingShaft = /central\s*mounting\s*shaft/i.test(part)
-  if (isCentralMountingShaft) {
-    return {
-      fin: '28472',
-      partName: 'Central Mounting Shaft',
-      status: 'FAULT',
-      warningFaults: 'Vibration exceedance at N2. Possible imbalance or bearing wear. Inspect shaft runout and bearing clearance per AMM 72-00-00. Replace if limits exceeded.'
-    }
-  }
-  if (isEngine) {
-    return {
-      fin: '28472',
-      partName: 'Central Mounting Shaft',
-      status: 'FAULT',
-      warningFaults: 'Vibration exceedance at N2. Possible imbalance or bearing wear. Inspect shaft runout and bearing clearance per AMM 72-00-00. Replace if limits exceeded.'
-    }
-  }
+  const mflRecords = props.mflList.filter((r) => r.part === part || r.finNumber === part)
+  const primaryMfl = mflRecords[0] ?? null
   return {
-    fin: '-----',
-    partName: part,
-    status: 'WARNING',
-    warningFaults: `Anomaly reported on ${part}. Inspect per AMM.`
+    fin: override.fin ?? part,
+    lruName: part,
+    mflId: primaryMfl?.Fault_Code ?? primaryMfl?.MFL_Id ?? '—',
+    description: primaryMfl?.Description ?? override.warningFaults ?? '—'
   }
+}
+
+/** Summary card for the currently isolated part (same fields as hover card). */
+const activeFaultSummary = computed(() => {
+  const name = isolatedName.value
+  if (!name) return null
+  const fault = faultDefs.value.find((f) => f.part === name)
+  return makeFaultCard(name, fault?.type ?? null, fault ?? {})
 })
 
-const partDetailData = computed(() => {
-  const part = isolatedPartName.value
-  if (!part) return null
-  const isEngine = /engine/i.test(part)
-  const isCentralMountingShaft = /central\s*mounting\s*shaft/i.test(part)
-  const isLandingGear = /lg|landing|gear/i.test(part)
-  const isFrontLGSensor = part === 'Front LG' && props.faultType === 'SENSOR'
-  if (isCentralMountingShaft) {
-    return {
-      partName: 'Central Mounting Shaft',
-      parentAssembly: 'F135-PW-100 — Jet engine Assem1 (Engine core)',
-      replacementRequirement: 'On-condition; replace if runout or bearing clearance out of limits. Inspect per AMM 72-00-00.',
-      stockStatus: 'In stock (1 unit) — P/N 28472-001',
-      ataChapter: 'ATA 72 — Engine (72-00 Power Plant)',
-      leadTime: '48–72 hours (central depot)',
-      serialRange: 'SN 28472001 – 28472100',
-      remarks: 'Shaft runout and bearing clearance check required. EASA Form 1 / 8130-3 required.'
-    }
-  }
-  if (isEngine) {
-    return {
-      partName: 'Central Mounting Shaft',
-      parentAssembly: 'F135-PW-100 — Jet engine Assem1 (Engine core)',
-      replacementRequirement: 'On-condition; replace if runout or bearing clearance out of limits. Inspect per AMM 72-00-00.',
-      stockStatus: 'In stock (1 unit) — P/N 28472-001',
-      ataChapter: 'ATA 72 — Engine (72-00 Power Plant)',
-      leadTime: '48–72 hours (central depot)',
-      serialRange: 'SN 28472001 – 28472100',
-      remarks: 'Shaft runout and bearing clearance check required. EASA Form 1 / 8130-3 required.'
-    }
-  }
-  if (isLandingGear || isFrontLGSensor) {
-    const isFrontLG = part === 'Front LG' || /front\s*lg|nose\s*gear/i.test(part)
-    const baseRemarks = 'Oleopneumatic shock absorber check required.'
-    const sensorRemarks = isFrontLGSensor
-      ? ' Sensor fault: position/weight-on-wheels sensor to be calibrated or replaced. Apply AMM 32-21-00 sensor calibration/replacement procedure.'
-      : ''
-    return {
-      partName: part === 'Front LG' ? 'Front LG (Front Landing Gear)' : part,
-      parentAssembly: isFrontLG ? 'F35 Lightning II — Nose Landing Gear Assembly (ATA 32-21)' : 'F35 Lightning II — Landing Gear Assembly',
-      replacementRequirement: isFrontLG
-        ? 'Sensor fault: replace or calibrate per AMM 32-21-00. Scheduled overhaul per MSG-3.'
-        : 'Scheduled overhaul per MSG-3; replace at wear limit',
-      stockStatus: isFrontLG
-        ? 'Sensor in stock (3 units) — P/N 32101-002. Assembly P/N 32101-001 on order.'
-        : 'In stock (1 unit) — P/N 32101-001, available on order',
-      ataChapter: isFrontLG ? 'ATA 32 — Landing Gear (32-21 Nose Gear)' : 'ATA 32 — Landing Gear',
-      leadTime: isFrontLG ? '5–7 business days (sensor 24–48 h local depot)' : '5–7 business days',
-      serialRange: 'SN 32101001 – 32101200',
-      remarks: baseRemarks + sensorRemarks
-    }
-  }
-  return {
-    partName: part,
-    parentAssembly: 'F35 Lightning II — F35v2',
-    replacementRequirement: 'On-condition or scheduled per AMM and CMM',
-    stockStatus: 'Supply on request',
-    ataChapter: '—',
-    leadTime: 'Depends on supplier',
-    serialRange: '—',
-    remarks: 'Part number and revision must be verified in AMM.'
-  }
+/** LRU record for the currently isolated part/assembly. */
+const activeLru = computed(() => {
+  const name = isolatedName.value
+  if (!name) return null
+  return props.lruList.find((r) => r.part === name) ?? null
 })
 
-watch(faultyPartName, () => {
-  // If we have a faulty part, default to making non-faulty parts semi-transparent.
-  if (!faultyPartName.value) transparentOthers.value = false
-  else transparentOthers.value = true
+/** MFL records for the currently isolated part/assembly. */
+const activeMflList = computed(() => {
+  const name = isolatedName.value
+  if (!name) return []
+  return props.mflList.filter((r) => r.part === name)
+})
+
+watch(activeFaultNames, () => {
+  // If there are faults, default to making non-faulty parts semi-transparent.
+  transparentOthers.value = activeFaultNames.value.length > 0
   updateFaultyHighlight()
 })
 watch(transparentOthers, () => updateFaultyHighlight())
@@ -371,11 +369,10 @@ watch([isIsolated, partDetailPanelOpen], () => {
 
 watch(() => props.modelUrl, (newUrl) => {
   loadModelFromUrl(newUrl)
-  faultyPartName.value = props.faultyPart ?? ''
 })
 
-watch(() => props.faultyPart, (newVal) => {
-  // Uçak değiştiğinde izolasyonu kaldır, tüm parçayı göster, kamerayı sıfırla
+watch(() => [props.faultyPart, props.faults], () => {
+  // Aircraft changed: clear isolation, show all parts, reset the camera.
   if (modelGroup) {
     modelGroup.traverse((obj) => {
       if (obj.isMesh) obj.visible = true
@@ -383,15 +380,16 @@ watch(() => props.faultyPart, (newVal) => {
     isolatedMesh = null
     isIsolated.value = false
     isolatedPartName.value = ''
-    isolatedMarkerData.value = null
+    isolatedName.value = ''
     partDetailPanelOpen.value = false
     clearHover()
     resetView()
   }
-  faultyPartName.value = newVal ?? ''
-  transparentOthers.value = !!newVal
   isDetailView.value = false
-})
+  detailFaultName.value = ''
+  transparentOthers.value = activeFaultNames.value.length > 0
+  updateFaultyHighlight()
+}, { deep: true })
 
 let scene = null
 let camera = null
@@ -403,14 +401,30 @@ let raycaster = null
 let pointer = null
 let hoveredMesh = null
 let isolatedMesh = null
-let faultMarkerMeshes = []
+let viewportGizmo = null
+const gltfLoader = new GLTFLoader()
+
+function initViewportGizmo() {
+  const container = stageRef.value || canvasEl.value?.parentElement
+  if (!camera || !renderer || !controls || !container) return
+
+  viewportGizmo?.dispose()
+  viewportGizmo = createViewportGizmo(
+    ViewportGizmo,
+    camera,
+    renderer,
+    controls,
+    container,
+    { swapFrontBack: activeViewConfig.value.swapFrontBack }
+  )
+}
 
 function initThree() {
   const canvas = canvasEl.value
   if (!canvas) return
 
   scene = new THREE.Scene()
-  scene.background = new THREE.Color(0xf3f4f6)
+  scene.background = readStageColor(stageRef.value)
 
   camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100000)
   camera.position.set(10, 8, 10)
@@ -439,6 +453,7 @@ function initThree() {
   controls.maxDistance = 100000
 
   modelGroup = new THREE.Group()
+  applyModelOrientation(modelGroup, activeViewConfig.value)
   scene.add(modelGroup)
 
   raycaster = new THREE.Raycaster()
@@ -446,6 +461,8 @@ function initThree() {
   canvas.addEventListener('pointermove', onPointerMove)
   canvas.addEventListener('pointerleave', onPointerLeave)
   canvas.addEventListener('pointerdown', onPointerDown)
+
+  initViewportGizmo()
 
   onResize()
   window.addEventListener('resize', onResize)
@@ -459,7 +476,7 @@ function loop() {
   rafId = requestAnimationFrame(loop)
   controls?.update()
 
-  // Compute 2D screen positions for every fault overlay (named part + markers).
+  // Compute 2D screen positions for every fault overlay (named parts).
   const entries = faultEntries.value
   if (entries.length && modelGroup && camera && canvasEl.value) {
     const canvas = canvasEl.value
@@ -468,29 +485,14 @@ function loop() {
     const stageRect = stage.getBoundingClientRect()
     const labels = []
     entries.forEach((entry, idx) => {
-      // Resolve the world position of this fault.
-      let hasPos = false
-      if (entry.kind === 'marker') {
-        const cube = faultMarkerMeshes.find((c) => c.userData.markerIndex === entry.markerIndex)
-        if (cube) {
-          // While isolated, only show the isolated object's label.
-          if (isIsolated.value && cube !== isolatedMesh) return
-          cube.getWorldPosition(worldPos)
-          hasPos = true
-        }
-      } else {
-        // Named part: use the union bounding box center of matching meshes.
-        if (isIsolated.value && !(isolatedMesh && isolatedMesh.userData.partName === entry.partName)) return
-        const bbox = new THREE.Box3()
-        modelGroup.traverse((obj) => {
-          if (obj.isMesh && obj.userData.partName === entry.partName) bbox.union(new THREE.Box3().setFromObject(obj))
-        })
-        if (!bbox.isEmpty()) {
-          bbox.getCenter(worldPos)
-          hasPos = true
-        }
-      }
-      if (!hasPos) return
+      // Named part: use the union bounding box center of matching meshes.
+      if (isIsolated.value && entry.partName !== isolatedName.value) return
+      const bbox = new THREE.Box3()
+      modelGroup.traverse((obj) => {
+        if (obj.isMesh && meshMatchesPart(obj, entry.partName)) bbox.union(new THREE.Box3().setFromObject(obj))
+      })
+      if (bbox.isEmpty()) return
+      bbox.getCenter(worldPos)
       ndc.copy(worldPos).project(camera)
       // Skip faults that are behind the camera.
       if (ndc.z > 1) return
@@ -510,6 +512,7 @@ function loop() {
   }
 
   renderer?.render(scene, camera)
+  viewportGizmo?.render()
 }
 
 function onResize() {
@@ -521,38 +524,52 @@ function onResize() {
   renderer.setSize(width, height, false)
   camera.aspect = width / height
   camera.updateProjectionMatrix()
+  viewportGizmo?.update()
+}
+
+function disposeObject(obj) {
+  // GLB models are nested hierarchies, so we dispose recursively.
+  obj.traverse((c) => {
+    if (c.geometry) c.geometry.dispose()
+    if (c.material) {
+      if (Array.isArray(c.material)) c.material.forEach((m) => m.dispose())
+      else c.material.dispose()
+    }
+  })
 }
 
 function clearModel() {
   meshesCount.value = 0
   partNames.value = []
-  faultyPartName.value = props.faultyPart ?? ''
-  lastImportResult.value = null
   isIsolated.value = false
   isolatedPartName.value = ''
+  isolatedName.value = ''
   partDetailPanelOpen.value = false
   isolatedMesh = null
-  faultMarkerMeshes = []
   faultLabels.value = []
   hoveredFaultId.value = null
-  isolatedMarkerData.value = null
   clearHover()
   if (!modelGroup) return
   while (modelGroup.children.length) {
     const obj = modelGroup.children[0]
     modelGroup.remove(obj)
-    if (obj.geometry) obj.geometry.dispose()
-    if (obj.material) {
-      if (Array.isArray(obj.material)) obj.material.forEach((m) => m.dispose())
-      else obj.material.dispose()
-    }
+    disposeObject(obj)
   }
+}
+
+// True if the mesh belongs to ANY currently-active faulty part/assembly.
+function meshIsFaulty(mesh) {
+  const names = activeFaultNames.value
+  for (const n of names) {
+    if (meshMatchesPart(mesh, n)) return true
+  }
+  return false
 }
 
 function applyPartStyle(mesh) {
   const mat = mesh.material
   if (!mat || !mat.isMeshStandardMaterial) return
-  const isFaulty = mesh.userData.isFaultMarker || (faultyPartName.value && mesh.userData.partName === faultyPartName.value)
+  const isFaulty = meshIsFaulty(mesh)
   if (isFaulty) {
     // Fault highlight color (red) is applied here.
     mat.color.setHex(0xdc2626)
@@ -634,22 +651,25 @@ function onPointerMove(event) {
     return
   }
 
-  canvas.style.cursor = 'pointer'
+  canvas.style.cursor = viewOnly.value ? 'default' : 'pointer'
   const obj = hits[0].object
   setHovered(obj)
-  if (obj.userData.isFaultMarker) {
-    hoveredFaultId.value = 'marker:' + obj.userData.markerIndex
-  } else if (faultyPartName.value && obj.userData.partName === faultyPartName.value) {
-    hoveredFaultId.value = 'part:' + faultyPartName.value
-  } else {
-    hoveredFaultId.value = null
+  // If the hovered mesh belongs to one of the faults, show that fault's card.
+  let matchedId = null
+  for (const e of faultEntries.value) {
+    if (meshMatchesPart(obj, e.partName)) {
+      matchedId = e.id
+      break
+    }
   }
+  hoveredFaultId.value = matchedId
 }
 
 function onPointerDown(event) {
   const canvas = canvasEl.value
   if (!canvas || !raycaster || !camera || !modelGroup) return
   if (meshesCount.value === 0) return
+  if (viewOnly.value) return
 
   const rect = canvas.getBoundingClientRect()
   pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
@@ -664,21 +684,32 @@ function onPointerDown(event) {
   if (!hits.length) return
 
   const clicked = hits[0].object
-  const clickedPartName = clicked?.userData?.partName || ''
-  if (isIsolated.value && clicked === isolatedMesh) {
-    showAllParts()
-    return
-  }
-  if (!isDetailView.value && props.detailModelUrl && props.detailFaultyPart && clickedPartName === faultyPartName.value) {
-    // Detail-view switch: when user clicks the faulty part, swap to the detail model.
+  if (props.detailModelUrl && props.detailFaultyPart && meshIsFaulty(clicked)) {
+    // Detail-view switch: when user clicks a faulty part, swap to the detail model.
     isDetailView.value = true
     loadModelFromUrl(props.detailModelUrl).then(() => {
-      faultyPartName.value = props.detailFaultyPart
+      detailFaultName.value = props.detailFaultyPart
       updateFaultyHighlight()
     })
     return
   }
-  isolatePart(clicked)
+  // If the clicked mesh belongs to a faulty part/assembly, select the WHOLE unit
+  // (e.g. clicking "Component003" inside "Left engine" selects the whole engine).
+  // This prevents drilling into individual sub-parts of a faulty assembly.
+  const faultName = faultNameForMesh(clicked)
+  if (faultName) {
+    isolateByName(faultName)
+  } else {
+    isolatePart(clicked)
+  }
+}
+
+// Return the fault part/assembly name that the given mesh belongs to, or '' if none.
+function faultNameForMesh(mesh) {
+  for (const e of faultEntries.value) {
+    if (meshMatchesPart(mesh, e.partName)) return e.partName
+  }
+  return ''
 }
 
 function isolatePart(mesh) {
@@ -689,7 +720,7 @@ function isolatePart(mesh) {
   })
   isolatedMesh = mesh
   isolatedPartName.value = mesh?.userData?.partName || ''
-  isolatedMarkerData.value = mesh?.userData?.isFaultMarker ? mesh.userData.markerData : null
+  isolatedName.value = isolatedPartName.value
   partDetailPanelOpen.value = true
   isIsolated.value = true
   const bbox = new THREE.Box3().setFromObject(mesh)
@@ -697,47 +728,63 @@ function isolatePart(mesh) {
   // - We isolate the mesh (hide others)
   // - Then we fit the camera to the mesh bounding box via `focusToBox`
   // - Smaller multiplier => closer zoom
-  if (!bbox.isEmpty()) focusToBox(bbox, 1.2)
+  if (!bbox.isEmpty()) focusToBox(bbox, activeViewConfig.value.zoom.part)
+}
+
+/**
+ * Isolate a whole part/assembly by name: show only the meshes that belong to it (incl.
+ * all sub-parts of an assembly), open the detail panel and frame the camera on it.
+ */
+function isolateByName(name) {
+  if (!modelGroup || !name) return
+  clearHover()
+  const matches = []
+  modelGroup.traverse((obj) => {
+    if (!obj.isMesh) return
+    const m = meshMatchesPart(obj, name)
+    obj.visible = m
+    if (m) matches.push(obj)
+  })
+  if (!matches.length) return
+  isolatedMesh = matches.length === 1 ? matches[0] : null
+  isolatedPartName.value = name
+  isolatedName.value = name
+  partDetailPanelOpen.value = true
+  isIsolated.value = true
+  const bbox = new THREE.Box3()
+  matches.forEach((m) => bbox.union(new THREE.Box3().setFromObject(m)))
+  if (!bbox.isEmpty()) {
+    focusToBox(bbox, matches.length === 1 ? activeViewConfig.value.zoom.part : activeViewConfig.value.zoom.assembly)
+  }
 }
 
 function focusFault(faultId) {
-  // Clicking a fault pin or a list row "drills into" that fault: focus the camera on
-  // it and open the detail panel. Works for both coordinate markers and named parts.
+  // Clicking a fault pin or a list row "drills into" that fault: isolate the whole
+  // faulty unit (part or assembly) and open the detail panel.
   if (!modelGroup) return
   const entry = faultEntries.value.find((e) => e.id === faultId)
   if (!entry) return
 
-  if (entry.kind === 'marker') {
-    const cube = faultMarkerMeshes.find((c) => c.userData.markerIndex === entry.markerIndex)
-    if (cube) isolatePart(cube)
-    return
-  }
-
-  // Named part: if a deeper detail model exists for this part, switch to it (same as
-  // clicking the part in 3D); otherwise isolate the matching mesh.
-  if (!isDetailView.value && props.detailModelUrl && props.detailFaultyPart && entry.partName === faultyPartName.value) {
+  // If a deeper detail model exists, switch to it instead of isolating.
+  if (!isDetailView.value && props.detailModelUrl && props.detailFaultyPart) {
     isDetailView.value = true
     loadModelFromUrl(props.detailModelUrl).then(() => {
-      faultyPartName.value = props.detailFaultyPart
+      detailFaultName.value = props.detailFaultyPart
       updateFaultyHighlight()
     })
     return
   }
-  let target = null
-  modelGroup.traverse((obj) => {
-    if (!target && obj.isMesh && obj.userData.partName === entry.partName) target = obj
-  })
-  if (target) isolatePart(target)
+  isolateByName(entry.partName)
 }
 
 function showAllParts() {
   if (isDetailView.value) {
     loadModelFromUrl(props.modelUrl)
-    faultyPartName.value = props.faultyPart ?? ''
     isDetailView.value = false
+    detailFaultName.value = ''
     isolatedMesh = null
     isolatedPartName.value = ''
-    isolatedMarkerData.value = null
+    isolatedName.value = ''
     partDetailPanelOpen.value = false
     isIsolated.value = false
     clearHover()
@@ -749,7 +796,7 @@ function showAllParts() {
   })
   isolatedMesh = null
   isolatedPartName.value = ''
-  isolatedMarkerData.value = null
+  isolatedName.value = ''
   partDetailPanelOpen.value = false
   isIsolated.value = false
   clearHover()
@@ -768,171 +815,178 @@ function toggleWireframe() {
   setWireframe(!wireframe.value)
 }
 
-function focusToBox(bbox, distanceMultiplier = 4.0) {
-  // Camera fit helper. Used for:
-  // - initial load (fit entire model)
-  // - isolate part (fit selected part)
-  if (!camera || !controls) return
-  const center = new THREE.Vector3()
-  const size = new THREE.Vector3()
-  bbox.getCenter(center)
-  bbox.getSize(size)
-
-  const maxDim = Math.max(size.x, size.y, size.z)
-  const fov = camera.fov * (Math.PI / 180)
-  let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2))
-  cameraZ *= camera.aspect > 1 ? camera.aspect : 1
-  cameraZ *= distanceMultiplier
-
-  camera.position.set(center.x + cameraZ * 0.55, center.y + cameraZ * 0.35, center.z + cameraZ)
-  camera.lookAt(center)
-  controls.target.copy(center)
-  controls.update()
+function focusToBox(bbox, distanceMultiplier = activeViewConfig.value.zoom.fullModel) {
+  frameCameraOnBox(camera, controls, bbox, distanceMultiplier, modelGroup, activeViewConfig.value)
 }
 
 function resetView() {
   if (!modelGroup || modelGroup.children.length === 0) return
   const bbox = new THREE.Box3().setFromObject(modelGroup)
-  if (!bbox.isEmpty()) focusToBox(bbox, 0.5)
-}
-
-function clearFaultMarkers() {
-  for (const cube of faultMarkerMeshes) {
-    if (modelGroup) modelGroup.remove(cube)
-    cube.geometry?.dispose()
-    if (cube.material) {
-      if (Array.isArray(cube.material)) cube.material.forEach((m) => m.dispose())
-      else cube.material.dispose()
-    }
-  }
-  faultMarkerMeshes = []
-  faultLabels.value = []
+  if (!bbox.isEmpty()) focusToBox(bbox, activeViewConfig.value.zoom.fullModel)
 }
 
 /**
- * Build the marker card content (FIN/part/status/warnings) from a marker record.
+ * Derive the part name (= glTF node name) for a primitive mesh.
+ *
+ * GLTFLoader stores the ORIGINAL (un-deduplicated) glTF node name in
+ * `object.userData.name`. A multi-primitive mesh becomes a named Group (the node)
+ * with that userData.name; its primitive children have no userData.name. So we walk
+ * up from the mesh and return the nearest ancestor (incl. self) that carries a
+ * `userData.name`, which is exactly the leaf node name (e.g. "Engine", "Front LG").
  */
-function markerCardData(marker) {
-  return {
-    fin: marker?.fin ?? '-----',
-    partName: marker?.partName ?? 'System',
-    status: marker?.status ?? 'FAULT',
-    warningFaults: marker?.warningFaults ?? `Fault reported on ${marker?.partName ?? 'system'}.`
+function pickPartName(mesh) {
+  let o = mesh
+  while (o && o !== modelGroup) {
+    const n = o.userData && o.userData.name ? String(o.userData.name).trim() : ''
+    if (n) return n
+    o = o.parent
   }
+  const meshName = (mesh.name || '').trim()
+  return meshName || 'Part'
 }
 
 /**
- * Create one small cube per entry in `props.faultMarkers`, each at its own
- * coordinate. Each cube represents an external system/LRU and is highlighted
- * in red; an overlay card (arrow + info) points to each one (see `loop`).
+ * Collect the full chain of glTF node names from `obj` up to (but excluding) `stop`.
+ * The result is [leafName, parentAssembly, grandparentAssembly, ...], letting us match
+ * a fault against either a leaf part OR any ancestor assembly name.
  */
-function addFaultMarkers() {
-  if (!modelGroup) return
-  clearFaultMarkers()
-  const markers = Array.isArray(props.faultMarkers) ? props.faultMarkers : []
-  if (markers.length === 0) return
-
-  // Default cube size: ~1.5% of the model's largest dimension, used when a marker
-  // does not specify its own `size`.
-  let maxDim = 0
-  const modelBox = new THREE.Box3().setFromObject(modelGroup)
-  if (!modelBox.isEmpty()) {
-    const s = new THREE.Vector3()
-    modelBox.getSize(s)
-    maxDim = Math.max(s.x, s.y, s.z)
+function nodePath(obj, stop) {
+  const path = []
+  let o = obj
+  while (o && o !== stop) {
+    const n = o.userData && o.userData.name ? String(o.userData.name).trim() : ''
+    if (n && !path.includes(n)) path.push(n)
+    o = o.parent
   }
-  const defaultSize = maxDim > 0 ? maxDim * 0.015 : 1
+  return path
+}
 
-  markers.forEach((marker, i) => {
-    const pos = marker.position || { x: 0, y: 0, z: 0 }
-    const size = marker.size && marker.size > 0 ? marker.size : defaultSize
+/**
+ * True if `mesh` belongs to part/assembly `name`: matches its own leaf name OR any
+ * ancestor assembly name stored in `userData.partPath`. This is what makes selecting a
+ * whole assembly (e.g. "DC Converter Unit") highlight all of its sub-parts.
+ */
+function meshMatchesPart(mesh, name) {
+  if (!name || !mesh) return false
+  if (mesh.userData.partName === name) return true
+  const path = mesh.userData.partPath
+  return Array.isArray(path) && path.includes(name)
+}
 
-    const geometry = new THREE.BoxGeometry(1, 1, 1)
-    const material = new THREE.MeshStandardMaterial({
-      color: 0xdc2626,
-      emissive: 0xb91c1c,
-      emissiveIntensity: 0.7,
-      roughness: 0.5,
-      metalness: 0.2,
-      wireframe: wireframe.value
+/**
+ * Bake a mesh's world transform into a fresh position(+normal+index)-only geometry, so
+ * all geometries of one part can be merged (mergeGeometries needs matching attributes).
+ *
+ * BELLEK NOTU: Burada bilerek `toNonIndexed()` KULLANMIYORUZ. De-index etmek paylaşılan
+ * vertex'leri çoğaltıp vertex sayısını birkaç katına çıkarır ve büyük CAD modellerinde
+ * RAM'i patlatır (sekme çöker). Index korunur; sadece position/normal/index kopyalanır
+ * (uv, color, tangent gibi gereksiz attribute'lar atılır).
+ */
+function bakeGeometry(mesh) {
+  const src = mesh.geometry
+  if (!src) return null
+  const pos = src.getAttribute('position')
+  if (!pos) return null
+  const out = new THREE.BufferGeometry()
+  out.setAttribute('position', pos.clone())
+  const normal = src.getAttribute('normal')
+  if (normal) out.setAttribute('normal', normal.clone())
+  if (src.index) out.setIndex(src.index.clone())
+  out.applyMatrix4(mesh.matrixWorld) // position + normal'ı world uzayına taşır
+  if (!normal) out.computeVertexNormals()
+  return out
+}
+
+/**
+ * Bir parçaya ait geometrileri mergeGeometries için uyumlu hale getirir.
+ * mergeGeometries tüm girdilerin AYNI index durumunda (hepsi indexed ya da hepsi
+ * non-indexed) olmasını ister. Karışıksa (nadir) hepsini de-index ederiz; bu sadece
+ * o parça için geçerli olduğundan genel bellek kazancı korunur.
+ */
+function normalizePartGeoms(geoms) {
+  const anyIndexed = geoms.some((g) => g.index)
+  const allIndexed = geoms.every((g) => g.index)
+  if (anyIndexed && !allIndexed) {
+    return geoms.map((g) => {
+      const ng = g.toNonIndexed()
+      if (ng !== g) g.dispose()
+      return ng
     })
-    const cube = new THREE.Mesh(geometry, material)
-    cube.position.set(pos.x ?? 0, pos.y ?? 0, pos.z ?? 0)
-    cube.scale.setScalar(size)
-    cube.userData.isFaultMarker = true
-    cube.userData.markerIndex = i
-    cube.userData.markerData = marker
-    cube.userData.partName = marker.partName || `Fault ${i + 1}`
-    modelGroup.add(cube)
-    faultMarkerMeshes.push(cube)
-  })
+  }
+  return geoms
 }
 
-function renderImported(importResult) {
-  if (!importResult?.meshes?.length) return
-  const bbox = new THREE.Box3()
-  let first = true
-  const nameSet = new Set()
-  let meshIndex = 0
+/**
+ * Render a loaded glTF/GLB into the scene.
+ *
+ * glTF/STEP exports often split a single part into many primitive meshes. We merge
+ * all primitives that belong to the same node into ONE mesh per part, so the HMS
+ * logic (fault highlight by part name, isolation, bounding-box fit) works on whole
+ * parts instead of individual triangle chunks. Materials are replaced with a fresh
+ * MeshStandardMaterial so per-mesh highlight/hover/transparency is safe.
+ */
+function renderGltf(gltf) {
+  const root = gltf.scene || (Array.isArray(gltf.scenes) ? gltf.scenes[0] : null)
+  if (!root) throw new Error('glTF does not contain a scene.')
 
-  for (const meshData of importResult.meshes) {
-    if (!meshData?.attributes?.position?.array || !meshData?.index?.array) {
-      meshIndex++
-      continue
+  root.updateMatrixWorld(true)
+
+  const partGeoms = new Map()
+  const partPaths = new Map()
+  const order = []
+  root.traverse((obj) => {
+    if (!obj.isMesh) return
+    const partName = pickPartName(obj)
+    const geom = bakeGeometry(obj)
+    if (!geom) return
+    if (!partGeoms.has(partName)) {
+      partGeoms.set(partName, [])
+      partPaths.set(partName, nodePath(obj, root))
+      order.push(partName)
     }
+    partGeoms.get(partName).push(geom)
+  })
 
-    const geometry = new THREE.BufferGeometry()
-    const positions = new Float32Array(meshData.attributes.position.array)
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
-
-    if (meshData.attributes.normal?.array) {
-      const normals = new Float32Array(meshData.attributes.normal.array)
-      geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3))
-    } else {
-      geometry.computeVertexNormals()
-    }
-
-    const indices = new (positions.length / 3 > 65535 ? Uint32Array : Uint16Array)(meshData.index.array)
-    geometry.setIndex(new THREE.BufferAttribute(indices, 1))
-
-    const partName = (meshData.name && String(meshData.name).trim()) || `Parça #${meshIndex + 1}`
-    nameSet.add(partName)
+  for (const partName of order) {
+    let geoms = partGeoms.get(partName)
+    if (geoms.length > 1) geoms = normalizePartGeoms(geoms)
+    const merged = geoms.length === 1 ? geoms[0] : mergeGeometries(geoms, false)
+    if (!merged) continue
+    geoms.forEach((g) => { if (g !== merged) g.dispose() })
 
     const material = new THREE.MeshStandardMaterial({
-      color: meshData.color && meshData.color.length === 3 ? new THREE.Color(...meshData.color) : new THREE.Color(0xd6d9e6),
+      color: new THREE.Color(0xd6d9e6),
       roughness: 0.55,
       metalness: 0.15,
       side: THREE.DoubleSide,
       wireframe: wireframe.value
     })
-
-    const mesh = new THREE.Mesh(geometry, material)
+    const mesh = new THREE.Mesh(merged, material)
     mesh.userData.partName = partName
+    mesh.userData.partPath = partPaths.get(partName) || [partName]
     modelGroup.add(mesh)
     meshesCount.value += 1
+  }
 
-    if (first) {
-      bbox.setFromObject(mesh)
-      first = false
-    } else {
-      bbox.union(new THREE.Box3().setFromObject(mesh))
+  // Free the original (now-unused) glTF scene resources.
+  root.traverse((obj) => {
+    if (obj.isMesh) {
+      obj.geometry?.dispose()
+      if (obj.material) {
+        if (Array.isArray(obj.material)) obj.material.forEach((m) => m.dispose())
+        else obj.material.dispose()
+      }
     }
-    meshIndex++
-  }
+  })
 
-  partNames.value = Array.from(nameSet).sort((a, b) => a.localeCompare(b))
+  partNames.value = order.slice().sort((a, b) => a.localeCompare(b))
 
-  if (Array.isArray(props.faultMarkers) && props.faultMarkers.length > 0) {
-    // Coordinate-based faults: place a red cube at each marker location.
-    addFaultMarkers()
-    faultyPartName.value = ''
-    transparentOthers.value = true
-  } else {
-    faultyPartName.value = props.faultyPart ?? ''
-    if (props.faultyPart) transparentOthers.value = true
-  }
+  transparentOthers.value = activeFaultNames.value.length > 0
   updateFaultyHighlight()
-  if (!bbox.isEmpty()) focusToBox(bbox, 0.5)
+
+  modelGroup.updateMatrixWorld(true)
+  const fitBox = new THREE.Box3().setFromObject(modelGroup)
+  if (!fitBox.isEmpty()) focusToBox(fitBox, activeViewConfig.value.zoom.fullModel)
 }
 
 async function loadModelFromUrl(url) {
@@ -941,14 +995,8 @@ async function loadModelFromUrl(url) {
   statusText.value = 'Loading model...'
   clearModel()
   try {
-    const res = await fetch(url)
-    if (!res.ok) throw new Error(`File not found: ${res.status}`)
-    const text = await res.text()
-    const data = JSON.parse(text)
-    if (!data || !Array.isArray(data.meshes)) throw new Error('Invalid JSON: meshes array not found.')
-    if (data.success === undefined) data.success = true
-    lastImportResult.value = data
-    renderImported(data)
+    const gltf = await gltfLoader.loadAsync(url)
+    renderGltf(gltf)
     setWireframe(wireframe.value)
     statusText.value = `Loaded. Mesh count: ${meshesCount.value}`
   } catch (e) {
@@ -960,11 +1008,12 @@ async function loadModelFromUrl(url) {
 
 onMounted(() => {
   initThree()
+  disposeStageBg = observeStageBackground(() => scene, () => stageRef.value)
   loadModelFromUrl(props.modelUrl)
-  faultyPartName.value = props.faultyPart ?? ''
 })
 
 onBeforeUnmount(() => {
+  disposeStageBg?.()
   window.removeEventListener('resize', onResize)
   if (rafId) cancelAnimationFrame(rafId)
   const canvas = canvasEl.value
@@ -973,8 +1022,10 @@ onBeforeUnmount(() => {
     canvas.removeEventListener('pointerleave', onPointerLeave)
     canvas.removeEventListener('pointerdown', onPointerDown)
   }
+  viewportGizmo?.dispose()
   controls?.dispose()
   renderer?.dispose()
+  viewportGizmo = null
   scene = camera = renderer = controls = modelGroup = null
 })
 </script>
@@ -997,7 +1048,7 @@ onBeforeUnmount(() => {
 .title {
   font-size: 22px;
   font-weight: 800;
-  color: #2c3e50;
+  color: var(--text-primary);
 }
 
 .controls {
@@ -1007,52 +1058,21 @@ onBeforeUnmount(() => {
   align-items: center;
 }
 
-.btn {
-  padding: 10px 14px;
-  border-radius: 10px;
-  border: 1px solid #dbe2ff;
-  background: white;
-  cursor: pointer;
-  font-weight: 700;
-}
-
-.btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.btn-back {
-  background: #1e40af;
-  color: white;
-  border-color: #1e40af;
-}
-
-.btn-panel-toggle {
-  background: #f1f5f9;
-  color: #475569;
-  border-color: #cbd5e1;
-}
-.btn-panel-toggle.active {
-  background: #1e40af;
-  color: white;
-  border-color: #1e40af;
-}
-
 .status {
   padding: 12px 14px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.6);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
 }
 
 .statusText {
-  color: #111827;
+  color: var(--text-primary);
   font-weight: 700;
 }
 
 .errorText {
   margin-top: 6px;
-  color: #b91c1c;
+  color: #ef4444;
   font-weight: 700;
 }
 
@@ -1064,7 +1084,7 @@ onBeforeUnmount(() => {
   height: min(72vh, 720px);
   overflow: hidden;
   border-radius: 14px;
-  border: 1px solid rgba(17, 24, 39, 0.12);
+  border: 1px solid var(--border-color);
 }
 
 .stage-wrapper-split {
@@ -1078,7 +1098,7 @@ onBeforeUnmount(() => {
   min-height: 0;
   border-radius: 0;
   border: none;
-  border-right: 1px solid rgba(17, 24, 39, 0.1);
+  border-right: 1px solid var(--border-color);
 }
 
 .stage-wrapper-split .part-detail-panel {
@@ -1093,7 +1113,7 @@ onBeforeUnmount(() => {
   width: 340px;
   max-width: 100%;
   padding: 20px 18px;
-  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  background: var(--bg-primary);
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -1112,37 +1132,16 @@ onBeforeUnmount(() => {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #64748b;
-}
-
-.part-detail-close {
-  flex-shrink: 0;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: none;
-  border-radius: 6px;
-  background: #e2e8f0;
-  color: #64748b;
-  font-size: 20px;
-  line-height: 1;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.part-detail-close:hover {
-  background: #cbd5e1;
-  color: #334155;
+  color: var(--text-muted);
 }
 
 .part-detail-heading {
   font-size: 18px;
   font-weight: 800;
-  color: #0f172a;
+  color: var(--text-primary);
   margin-bottom: 16px;
   padding-bottom: 12px;
-  border-bottom: 2px solid #1e40af;
+  border-bottom: 2px solid var(--color-primary-600);
 }
 
 .part-detail-list {
@@ -1157,7 +1156,7 @@ onBeforeUnmount(() => {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #64748b;
+  color: var(--text-muted);
   margin: 0 0 2px 0;
 }
 
@@ -1165,10 +1164,37 @@ onBeforeUnmount(() => {
   margin: 0 0 4px 0;
   font-size: 13px;
   line-height: 1.5;
-  color: #334155;
+  color: var(--text-primary);
 }
 
 .part-detail-list dd:last-of-type {
+  margin-bottom: 0;
+}
+
+.detail-section {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-color);
+}
+
+.detail-section-title {
+  margin: 0 0 12px;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.mfl-block {
+  padding: 12px;
+  margin-bottom: 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
+.mfl-block:last-child {
   margin-bottom: 0;
 }
 
@@ -1196,7 +1222,7 @@ onBeforeUnmount(() => {
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  background: radial-gradient(1200px 600px at 50% 60%, rgba(59, 130, 246, 0.12), rgba(255, 255, 255, 0.6));
+  background: radial-gradient(1200px 600px at 50% 60%, rgba(59, 130, 246, 0.12), var(--bg-tertiary));
 }
 
 .stage-wrapper:not(.stage-wrapper-split) .stage {
@@ -1212,7 +1238,9 @@ onBeforeUnmount(() => {
 
 .fault-pin {
   position: absolute;
-  transform: translate(-50%, -50%);
+  /* Small + semi-transparent by default so it does not hide the faulty part. */
+  transform: translate(-50%, -50%) scale(0.7);
+  opacity: 0.5;
   width: 26px;
   height: 26px;
   padding: 0;
@@ -1229,12 +1257,14 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  transition: transform 0.12s ease, opacity 0.12s ease, box-shadow 0.12s ease;
 }
 
 .fault-pin:hover,
 .fault-pin.active {
+  /* On hover/selection: grow to full size and become fully opaque. */
   transform: translate(-50%, -50%) scale(1.25);
+  opacity: 1;
   box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.25), 0 2px 8px rgba(185, 28, 28, 0.5);
   z-index: 8;
 }
@@ -1247,10 +1277,10 @@ onBeforeUnmount(() => {
   max-height: calc(100% - 24px);
   display: flex;
   flex-direction: column;
-  background: rgba(255, 255, 255, 0.96);
-  border: 1px solid rgba(17, 24, 39, 0.12);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
   border-radius: 10px;
-  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.12);
+  box-shadow: 0 6px 20px var(--shadow-color);
   overflow: hidden;
   z-index: 9;
 }
@@ -1261,9 +1291,9 @@ onBeforeUnmount(() => {
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #b91c1c;
-  background: #fef2f2;
-  border-bottom: 1px solid rgba(185, 28, 28, 0.18);
+  color: #ef4444;
+  background: rgba(220, 38, 38, 0.1);
+  border-bottom: 1px solid rgba(220, 38, 38, 0.28);
 }
 
 .fault-list {
@@ -1285,11 +1315,11 @@ onBeforeUnmount(() => {
 
 .fault-list-item:hover,
 .fault-list-item.active {
-  background: #fef2f2;
+  background: rgba(220, 38, 38, 0.1);
 }
 
 .fault-list-item.active {
-  box-shadow: inset 0 0 0 1px rgba(185, 28, 28, 0.4);
+  box-shadow: inset 0 0 0 1px rgba(220, 38, 38, 0.28);
 }
 
 .fault-list-num {
@@ -1311,10 +1341,19 @@ onBeforeUnmount(() => {
   min-width: 0;
   font-size: 12px;
   font-weight: 600;
-  color: #1f2937;
+  color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.fault-list-mfl {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 .fault-list-status {
@@ -1355,12 +1394,12 @@ onBeforeUnmount(() => {
   min-width: 200px;
   max-width: 320px;
   padding: 12px 16px;
-  background: #fff;
-  border: 1px solid #b91c1c;
+  background: var(--bg-primary);
+  border: 1px solid #dc2626;
   border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(185, 28, 28, 0.2);
+  box-shadow: 0 4px 16px var(--shadow-color);
   font-size: 12px;
-  color: #111827;
+  color: var(--text-primary);
   line-height: 1.45;
   font-family: 'Segoe UI', system-ui, sans-serif;
 }
@@ -1386,15 +1425,15 @@ onBeforeUnmount(() => {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
-  color: #7f1d1d;
-  border-bottom: 1px solid rgba(185, 28, 28, 0.25);
+  color: #ef4444;
+  border-bottom: 1px solid rgba(220, 38, 38, 0.28);
   padding-bottom: 6px;
   margin-bottom: 8px;
 }
 
 .fault-card-label {
   font-weight: 600;
-  color: #374151;
+  color: var(--text-muted);
   margin-right: 4px;
 }
 
@@ -1404,16 +1443,17 @@ onBeforeUnmount(() => {
   letter-spacing: 0.03em;
 }
 
-.fault-card-warnings {
+.fault-card-desc {
   white-space: normal;
   word-break: break-word;
   font-size: 11px;
-  color: #4b5563;
-  margin-top: 6px;
+  color: var(--text-primary);
+  margin-top: 4px;
   padding-top: 6px;
-  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  border-top: 1px solid var(--border-color);
 }
-.fault-card-warnings .fault-card-label {
+
+.fault-card-desc .fault-card-label {
   display: block;
   margin-bottom: 2px;
 }

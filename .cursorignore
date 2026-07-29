@@ -1,0 +1,109 @@
+﻿# =============================================================================
+# .cursorignore — Cursor indeksleme / token kullanımını azaltmak için
+# Vue.js + Vite + Three.js projesi
+# =============================================================================
+
+# --- Derleme ve bağımlılıklar ---
+node_modules/
+dist/
+dist-ssr/
+.npm/
+.pnpm-store/
+.yarn/
+.pnp.*
+.pnp.js
+
+# Vite build / cache / geçici çıktılar
+.vite/
+*.local
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# Test / coverage çıktıları
+coverage/
+.nyc_output/
+
+# --- 3D ve endüstriyel varlıklar (büyük CAD / mesh dosyaları) ---
+*.step
+*.stp
+*.STEP
+*.STP
+*.obj
+*.OBJ
+*.gltf
+*.GLTF
+*.glb
+*.GLB
+*.stl
+*.STL
+*.bin
+*.3ds
+*.fbx
+*.FBX
+*.dae
+*.iges
+*.igs
+
+# --- Medya ve statik dosyalar ---
+*.png
+*.PNG
+*.jpg
+*.jpeg
+*.JPG
+*.JPEG
+*.gif
+*.GIF
+*.webp
+*.WEBP
+*.svg
+*.SVG
+*.ico
+*.ICO
+*.bmp
+*.tiff
+*.tif
+*.mp4
+*.webm
+*.mov
+*.avi
+*.mkv
+*.mp3
+*.wav
+*.ogg
+
+# --- Çevre değişkenleri ve güvenlik ---
+.env
+.env.*
+!.env.example
+
+# --- Log dosyaları ---
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# --- IDE / OS / editör gürültüsü ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# --- Cypress / e2e medya çıktıları ---
+cypress/videos/
+cypress/screenshots/
+
+# --- TypeScript build info ---
+*.tsbuildinfo
+
+# --- Paket lock dosyaları (büyük, nadiren düzenlenir) ---
+package-lock.json
+yarn.lock
+pnpm-lock.yaml

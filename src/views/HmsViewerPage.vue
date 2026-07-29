@@ -1,23 +1,28 @@
 <template>
-  <div class="hms-viewer-page">
-    <div v-if="!aircraft" class="viewer-error">
-      <p>Aircraft not found.</p>
-      <router-link to="/" class="back-link">← Back to selection</router-link>
+  <div class="hms-viewer-page component-view">
+    <div v-if="loading" class="viewer-loading">
+      <p>Loading aircraft…</p>
+    </div>
+    <div v-else-if="!aircraft" class="viewer-error">
+      <p>{{ loadError || 'Aircraft not found.' }}</p>
+      <router-link :to="{ name: 'Entry' }" custom v-slot="{ navigate }">
+        <Button label="Back to selection" icon="pi pi-arrow-left" severity="secondary" text @click="navigate" />
+      </router-link>
     </div>
     <template v-else>
       <div class="viewer-header">
-        <router-link to="/" class="back-link">← Select another aircraft</router-link>
-        <span class="viewer-label">{{ aircraft.tailNumber }} — Model viewer</span>
+        <span class="viewer-label">
+          {{ aircraft.tailNumber }} — {{ flightLabel }} — Model Viewer
+        </span>
       </div>
       <div class="viewer-wrap">
         <HmsViewer
-          :key="aircraft.id"
-          :model-url="aircraft.modelUrl"
-          :faulty-part="aircraft.faultyPart"
-          :fault-type="aircraft.faultType"
-          :detail-model-url="aircraft.detailModelUrl"
-          :detail-faulty-part="aircraft.detailFaultyPart"
-          :fault-markers="aircraft.faultMarkers"
+          :key="`${aircraft.id}-${flightId}`"
+          :model-url="model.modelUrl"
+          :view-config="model.viewConfig"
+          :faults="faults"
+          :mfl-list="mflList"
+          :lru-list="[]"
         />
       </div>
     </template>
@@ -25,19 +30,76 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { aircraftList } from '../data/aircraft'
+import { getAircraftById } from '../api/fleet'
+import { findFlightsByAircraftId } from '../api/flight'
+import { getFilteredMflData, mflListToFaults, flattenMflForViewer } from '../api/mfl'
+import { attachModel } from '../config/modelRegistry'
 import HmsViewer from '../components/HmsViewer.vue'
+import Button from 'primevue/button'
 
 const route = useRoute()
 
-const aircraft = computed(() => {
-  // The viewer page is routed as `/view/:aircraftId`.
-  // Here we map that route param back into an aircraft record.
-  const id = route.params.aircraftId
-  return aircraftList.find((ac) => ac.id === id) ?? null
+const aircraft = ref(null)
+const mflList = ref([])
+const faults = ref([])
+const flightLabel = ref('')
+const loading = ref(true)
+const loadError = ref('')
+
+const flightId = computed(() => route.params.flightId)
+
+/** modelUrl/viewConfig attachModel ile loadViewerData içinde zenginleştirilir. */
+const model = computed(() => {
+  const ac = aircraft.value
+  if (!ac) return { modelUrl: '', viewConfig: null }
+  return { modelUrl: ac.modelUrl || '', viewConfig: ac.viewConfig ?? null }
 })
+
+async function loadViewerData(aircraftId, fId) {
+  loading.value = true
+  loadError.value = ''
+  mflList.value = []
+  faults.value = []
+  flightLabel.value = ''
+  try {
+    // Ana projede fleet.js kullanılmıyorsa giriş ekranı uçağı router state ile geçirir.
+    const fromState = history.state?.aircraft
+    const stateAircraft =
+      fromState && String(fromState.id) === String(aircraftId) ? fromState : null
+
+    const [acRaw, flightRows, mflRaw] = await Promise.all([
+      stateAircraft ? Promise.resolve(stateAircraft) : getAircraftById(aircraftId),
+      findFlightsByAircraftId(aircraftId),
+      getFilteredMflData(fId)
+    ])
+    const ac = attachModel(acRaw)
+    aircraft.value = ac
+    if (!ac) {
+      loadError.value = 'Uçak bulunamadı.'
+      return
+    }
+    const flight = flightRows.find((f) => f.id === fId)
+    flightLabel.value = flight?.flightNo ?? fId
+    mflList.value = flattenMflForViewer(mflRaw)
+    faults.value = mflListToFaults(mflRaw)
+  } catch (err) {
+    console.error('Failed to load viewer data:', err)
+    loadError.value = 'Uçuş / MFL verisi yüklenemedi.'
+    aircraft.value = null
+  } finally {
+    loading.value = false
+  }
+}
+
+watch(
+  () => [route.params.aircraftId, route.params.flightId],
+  ([aircraftId, fId]) => {
+    if (aircraftId && fId) loadViewerData(aircraftId, fId)
+  },
+  { immediate: true }
+)
 </script>
 
 <style scoped>
@@ -47,6 +109,18 @@ const aircraft = computed(() => {
   gap: 12px;
   width: 100%;
   min-height: 0;
+  flex: 1;
+}
+
+.viewer-loading,
+.viewer-error {
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.viewer-error {
+  color: #ef4444;
 }
 
 .viewer-header {
@@ -54,24 +128,13 @@ const aircraft = computed(() => {
   align-items: center;
   gap: 16px;
   flex-wrap: wrap;
-}
-
-.back-link {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: #1e40af;
-  text-decoration: none;
-  padding: 8px 0;
-}
-
-.back-link:hover {
-  text-decoration: underline;
+  padding: 0 4px;
 }
 
 .viewer-label {
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   font-weight: 700;
-  color: #334155;
+  color: var(--text-muted);
 }
 
 .viewer-wrap {
@@ -79,19 +142,5 @@ const aircraft = computed(() => {
   min-height: 0;
   display: flex;
   flex-direction: column;
-}
-
-.viewer-error {
-  padding: 32px;
-  text-align: center;
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  border-radius: 12px;
-  color: #b91c1c;
-}
-
-.viewer-error .back-link {
-  display: inline-block;
-  margin-top: 12px;
 }
 </style>

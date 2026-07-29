@@ -6,12 +6,12 @@ This document is a quick onboarding guide for developers who will continue this 
 
 - Entry page lets user select aircraft via hierarchy: `Country -> City -> Fleet -> Aircraft`.
 - Viewer page opens selected aircraft model and highlights faulted part.
-- Import page converts CAD files (STEP/IGES/BREP) to JSON and previews models.
+- GLB Preview page lets you upload a GLB/glTF file and preview it (no conversion needed).
 
 Core user flow:
 1. `Entry` (`/`) -> choose aircraft
 2. `View` (`/view/:aircraftId`) -> inspect model, fault highlight, isolate/zoom part
-3. Optional: `Import` (`/import`) -> convert and test models
+3. Optional: `Import` (`/import`) -> upload and preview a GLB file
 
 ## 2) Main Architecture
 
@@ -45,11 +45,13 @@ If you are new, open in this order:
 4. `src/components/HmsViewer.vue`
 5. `src/router/index.js`
 
-Supporting/legacy modules:
-- `src/views/ImportTool.vue` -> uses `StepUploadViewer`
-- `src/components/StepUploadViewer.vue` -> converter + preview tool
- 
-Note: older demo components were removed to keep the repo lean.
+Supporting modules:
+- `src/views/ImportTool.vue` -> uses `GlbUploadViewer`
+- `src/components/GlbUploadViewer.vue` -> GLB upload + preview tool
+
+Note: older demo components were removed to keep the repo lean. The previous
+STEP/IGES/BREP -> JSON converter (`occt-import-js`) was removed when the project
+switched to loading GLB models directly via Three.js `GLTFLoader`.
 
 ## 4) Critical Logic You Must Know
 
@@ -93,18 +95,19 @@ Note: older demo components were removed to keep the repo lean.
   - `fleets` filtered by selected country+city
   - `filteredAircraftSorted` filtered by all 3 and sorted by `tailNumber`
 
-## 5) Model JSON Contract (for compatibility)
+## 5) Model Contract (GLB)
 
-`HmsViewer` expects model JSON like:
-- top-level `meshes` array
-- each mesh has:
-  - `attributes.position.array` (required)
-  - `index.array` (required)
-  - `attributes.normal.array` (optional; computed if missing)
-  - `name` (used as partName)
-  - `color` (optional)
+`HmsViewer` loads a binary glTF (`.glb`) via Three.js `GLTFLoader`:
+- `modelUrl` points to a `.glb`/`.gltf` file served from `public/` (e.g. `/aircraft.gltf`).
+- Each mesh's **part name** is derived from the glTF node name (`mesh.name`, falling
+  back up the parent hierarchy). This name is what `faultyPart` must match.
+- On load, every mesh material is replaced with a fresh `MeshStandardMaterial` so the
+  HMS highlight/hover/transparency logic can mutate materials per-mesh safely.
 
-If this contract changes, update parsing in `HmsViewer.vue` (`renderImported` / `loadModelFromUrl`).
+If this contract changes, update parsing in `HmsViewer.vue` (`renderGltf` / `pickPartName` / `loadModelFromUrl`).
+
+> Note: If your GLB uses Draco/meshopt compression and fails to load, configure a
+> `DRACOLoader`/`MeshoptDecoder` on the `GLTFLoader` instance.
 
 ## 6) Embedding Notes (Host App Integration)
 
@@ -123,8 +126,8 @@ If this contract changes, update parsing in `HmsViewer.vue` (`renderImported` / 
   - `src/components/HmsViewer.vue`
 - Change route structure:
   - `src/router/index.js`
-- Change import/conversion behavior:
-  - `src/components/StepUploadViewer.vue`
+- Change GLB upload/preview behavior:
+  - `src/components/GlbUploadViewer.vue`
 
 ## 8) Quick Dev Commands
 
@@ -158,19 +161,18 @@ This section explains, in order, how the app goes from an aircraft selection to 
   - `faultType` (optional, affects overlay text)
   - `detailModelUrl` / `detailFaultyPart` (optional, for switching to a detail model)
 
-### Step 3 — `HmsViewer` loads the model JSON
+### Step 3 — `HmsViewer` loads the GLB model
 - File: `src/components/HmsViewer.vue`
 - Function: `loadModelFromUrl(url)`
 - Process:
-  - `fetch(url)` -> `text()` -> `JSON.parse(text)`
-  - Validate that `data.meshes` exists
-  - Call `renderImported(data)`
+  - `gltfLoader.loadAsync(url)` -> a parsed glTF scene
+  - Call `renderGltf(gltf)`
 
-### Step 4 — Part names are read from mesh JSON and stored on each Three.js mesh
+### Step 4 — Part names are read from glTF node names and stored on each Three.js mesh
 - File: `src/components/HmsViewer.vue`
-- Function: `renderImported(importResult)`
-- For each mesh entry in the JSON:
-  - Part name is taken from `meshData.name` (fallback to a generated name if missing)
+- Function: `renderGltf(gltf)` / `pickPartName(mesh, index)`
+- For each mesh in the loaded scene:
+  - Part name is taken from `mesh.name` (falling back up the parent hierarchy, then a generated name)
   - It is stored as: `mesh.userData.partName = partName`
 
 This `mesh.userData.partName` is the key used everywhere for matching/highlighting/labels.
