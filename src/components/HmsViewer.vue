@@ -7,7 +7,7 @@
 
       <div class="controls">
         <router-link :to="{ name: 'Entry' }" custom v-slot="{ navigate }">
-          <Button label="Back" icon="pi pi-arrow-left" severity="secondary" outlined :disabled="!modelLoaded" @click="navigate" />
+          <Button label="Back to selection" icon="pi pi-arrow-left" severity="secondary" outlined :disabled="!modelLoaded" @click="navigate" />
         </router-link>
         <Button
           label="Reset View"
@@ -35,7 +35,7 @@
         />
         <Button
           v-if="isIsolated || isDetailView"
-          label="Show all"
+          label="Back to model"
           icon="pi pi-arrow-left"
           @click="showAllParts"
         />
@@ -251,6 +251,9 @@ const transparentOthers = ref(false)
 const isDetailView = ref(false)
 // When a detail model is loaded, this holds the single faulty part name inside it.
 const detailFaultName = ref('')
+// While a part is being inspected the 3D view is read-only: clicking a part (or any of
+// its sub-parts) must not change the view. "Back to model" is the only way out.
+const viewOnly = computed(() => isIsolated.value || isDetailView.value)
 // Screen-space overlay labels for every fault (named parts).
 // Each: { id, num, x, y, card: { fin, partName, status, warningFaults } }
 const faultLabels = ref([])
@@ -648,7 +651,7 @@ function onPointerMove(event) {
     return
   }
 
-  canvas.style.cursor = 'pointer'
+  canvas.style.cursor = viewOnly.value ? 'default' : 'pointer'
   const obj = hits[0].object
   setHovered(obj)
   // If the hovered mesh belongs to one of the faults, show that fault's card.
@@ -666,6 +669,7 @@ function onPointerDown(event) {
   const canvas = canvasEl.value
   if (!canvas || !raycaster || !camera || !modelGroup) return
   if (meshesCount.value === 0) return
+  if (viewOnly.value) return
 
   const rect = canvas.getBoundingClientRect()
   pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
@@ -680,12 +684,7 @@ function onPointerDown(event) {
   if (!hits.length) return
 
   const clicked = hits[0].object
-  // Clicking the currently-isolated unit again returns to the full model.
-  if (isIsolated.value && meshMatchesPart(clicked, isolatedName.value)) {
-    showAllParts()
-    return
-  }
-  if (!isDetailView.value && props.detailModelUrl && props.detailFaultyPart && meshIsFaulty(clicked)) {
+  if (props.detailModelUrl && props.detailFaultyPart && meshIsFaulty(clicked)) {
     // Detail-view switch: when user clicks a faulty part, swap to the detail model.
     isDetailView.value = true
     loadModelFromUrl(props.detailModelUrl).then(() => {

@@ -1,4 +1,7 @@
 @import 'tailwindcss';
+@source not "../../../public/*.bin";
+@source not "../../../public/*.glb";
+@source not "../../../public/*.gltf";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
