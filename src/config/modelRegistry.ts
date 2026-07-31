@@ -16,28 +16,31 @@ export interface ModelRegistry {
   DEFAULT: ModelEntry
 }
 
-/** KF-21 için ortak görüntüleme ayarı (burun -Z yönünde olduğu için swapFrontBack=true). */
-const KF21_VIEW_CONFIG: ViewConfigPartial = {
-  modelRotation: { x: 0, y: Math.PI, z: 0 },
-  cameraOffset: { x: 0.85, y: 0.65, z: -0.85 },
-  swapFrontBack: true
+/**
+ * OML (dış kabuk) modeli CAD'den Z-up olarak export edilmiştir: uzun eksen Y, yükseklik Z.
+ * Three.js Y-up çalıştığı için X ekseninde -90° döndürülür, aksi halde uçak kuyruğu
+ * üzerinde dikilir. Burnun hangi yöne baktığına göre `swapFrontBack` ters çevrilebilir.
+ */
+const OML_VIEW_CONFIG: ViewConfigPartial = {
+  modelRotation: { x: Math.PI / 2, y: 0, z: 0 },
+  cameraOffset: { x: 0.85, y: 0.65, z: 0.85 },
+  swapFrontBack: false
+}
+
+const OML_ENTRY: ModelEntry = {
+  modelUrl: '/aircraft-oml.glb',
+  viewConfig: OML_VIEW_CONFIG
 }
 
 export const MODEL_REGISTRY: ModelRegistry = {
   byModel: {
-    'KF-21': {
-      modelUrl: '/KF-21.gltf',
-      viewConfig: KF21_VIEW_CONFIG
-    }
+    OML: OML_ENTRY
   },
   byAircraftId: {},
-  DEFAULT: {
-    modelUrl: '/KF-21.gltf',
-    viewConfig: KF21_VIEW_CONFIG
-  }
+  DEFAULT: OML_ENTRY
 }
 
-function getAircraftModelKey(aircraft: Aircraft): string {
+export function getAircraftModelKey(aircraft: Aircraft): string {
   const raw =
     aircraft.aircraftModel ??
     aircraft.model ??

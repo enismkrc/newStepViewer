@@ -34,6 +34,14 @@
           @click="transparentOthers = !transparentOthers"
         />
         <Button
+          v-if="anyLruLoaded && !viewOnly"
+          :label="shellOpaque ? 'Ghost shell' : 'Solid shell'"
+          icon="pi pi-box"
+          severity="secondary"
+          outlined
+          @click="shellOpaque = !shellOpaque"
+        />
+        <Button
           v-if="isIsolated || isDetailView"
           label="Back to model"
           icon="pi pi-arrow-left"
@@ -84,6 +92,38 @@
             <div class="fault-card-row fault-card-desc"><span class="fault-card-label">Description:</span> {{ activeFaultLabel.card.description }}</div>
           </div>
         </div>
+        <div v-if="chapterGroups.length && !viewOnly" class="chapter-panel">
+          <div class="chapter-panel-title">Equipment</div>
+          <div class="chapter-list">
+            <div v-for="group in chapterGroups" :key="group.code" class="chapter-group">
+              <div class="chapter-group-title" :class="{ 'has-fault': group.hasFault }">
+                <span class="chapter-code">{{ group.code }}</span>
+                <span class="chapter-name">{{ group.label }}</span>
+              </div>
+              <ul class="lru-list">
+                <li
+                  v-for="row in group.rows"
+                  :key="row.fin"
+                  class="lru-item"
+                  :class="{ 'has-fault': row.hasFault, 'is-missing': row.status === 'missing' }"
+                >
+                  <label class="lru-label">
+                    <input
+                      type="checkbox"
+                      class="lru-check"
+                      :checked="row.status === 'loaded'"
+                      :disabled="row.status === 'loading' || row.status === 'missing'"
+                      @change="toggleLru(row)"
+                    />
+                    <span class="lru-name">{{ row.label }}</span>
+                    <span class="lru-fin">{{ row.fin }}</span>
+                  </label>
+                  <span class="lru-status">{{ lruStatusText(row) }}</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
         <div v-if="hasFaults && !isIsolated" class="fault-list-panel">
           <div class="fault-list-title">Faults ({{ faultEntries.length }})</div>
           <ul class="fault-list">
@@ -115,7 +155,7 @@
             @click="partDetailPanelOpen = false"
           />
         </div>
-        <div class="part-detail-heading">{{ isolatedName }}</div>
+        <div class="part-detail-heading">{{ isolatedLabel }}</div>
 
         <dl v-if="activeFaultSummary" class="part-detail-list">
           <dt>FIN</dt>
@@ -227,7 +267,21 @@ const props = defineProps({
    * Optional per-aircraft viewer tuning (from API / mock JSON).
    * { modelRotation?: {x,y,z}, cameraOffset?: {x,y,z}, zoom?: {...}, swapFrontBack?: boolean }
    */
-  viewConfig: { type: Object, default: null }
+  viewConfig: { type: Object, default: null },
+  /**
+   * Equipment (LRU) models grouped by ATA chapter, from `@/config/ataChapterRegistry`:
+   * [{ code, label, models: [{ fin, ataChapter, label, url }] }]
+   *
+   * `modelUrl` is the aircraft's outer shell; these are the equipment models that live
+   * INSIDE it. Each file is exported in the aircraft's own coordinate system, so they are
+   * loaded into the same group without any extra alignment.
+   *
+   * One file = one LRU = one FIN. The FIN therefore identifies the FILE, not a node inside
+   * it, which is why faults and isolation work per source instead of per node name (CAD
+   * exports name their nodes `COMPOUND007` and similar). LRUs with a fault load
+   * automatically; the rest can be toggled from the side panel.
+   */
+  ataChapters: { type: Array, default: () => [] }
 })
 
 const activeViewConfig = computed(() => mergeViewConfig(props.viewConfig))
@@ -254,6 +308,22 @@ const detailFaultName = ref('')
 // While a part is being inspected the 3D view is read-only: clicking a part (or any of
 // its sub-parts) must not change the view. "Back to model" is the only way out.
 const viewOnly = computed(() => isIsolated.value || isDetailView.value)
+/**
+ * Side panel data: ATA chapter groups, each holding one row per LRU model. A row carries
+ * the load result of its GLB so a missing file degrades to a disabled row instead of
+ * breaking the viewer. `status`: 'idle' | 'loading' | 'loaded' | 'missing'.
+ */
+const chapterGroups = ref([])
+// The same row objects, flattened for FIN lookups.
+const lruRows = ref([])
+// User override for the shell's ghost mode (see `shellTransparent`).
+const shellOpaque = ref(false)
+
+// Model sources sharing one `modelGroup`: exactly one outer shell, plus one per LRU.
+const SHELL_KIND = 'shell'
+const LRU_KIND = 'lru'
+const SHELL_SOURCE_ID = 'shell'
+const lruSourceId = (fin) => `lru:${fin}`
 // Screen-space overlay labels for every fault (named parts).
 // Each: { id, num, x, y, card: { fin, partName, status, warningFaults } }
 const faultLabels = ref([])
@@ -277,7 +347,14 @@ const faultDefs = computed(() => {
   for (const f of raw) {
     if (!f || !f.part || seen.has(f.part)) continue
     seen.add(f.part)
-    out.push({ part: f.part, type: f.type ?? null, fin: f.fin, status: f.status, warningFaults: f.warningFaults })
+    out.push({
+      part: f.part,
+      type: f.type ?? null,
+      fin: f.fin,
+      status: f.status,
+      warningFaults: f.warningFaults,
+      ataChapter: f.ataChapter
+    })
   }
   return out
 })
@@ -289,8 +366,9 @@ const activeFaultNames = computed(() => {
 })
 
 /**
- * Fault list driving the side panel, the numbered pins and the hover detail cards.
- * Faults are always tied to a real, named part/assembly inside the model.
+ * Fault list driving the side panel, the numbered pins and the hover detail cards. A fault
+ * is tied to a FIN, which resolves either to a whole LRU model or — for older, named
+ * exports — to a part/assembly inside the shell.
  */
 const faultEntries = computed(() => {
   if (isDetailView.value) {
@@ -306,6 +384,24 @@ const faultEntries = computed(() => {
 })
 
 const hasFaults = computed(() => faultEntries.value.length > 0)
+
+/** FIN numbers that have at least one fault in this flight (uppercased for lookups). */
+const faultyFins = computed(() => {
+  const fins = new Set()
+  for (const f of faultDefs.value) {
+    const fin = String(f.fin ?? f.part ?? '').trim().toUpperCase()
+    if (fin) fins.add(fin)
+  }
+  return fins
+})
+
+const anyLruLoaded = computed(() => lruRows.value.some((r) => r.status === 'loaded'))
+
+/**
+ * The outer shell turns semi-transparent while equipment models are visible, otherwise it
+ * would completely hide them. The user can force it back to solid from the header.
+ */
+const shellTransparent = computed(() => anyLruLoaded.value && !shellOpaque.value)
 
 // The single detail card to render (only the hovered fault), if it is on screen.
 const activeFaultLabel = computed(() => {
@@ -356,6 +452,23 @@ const activeMflList = computed(() => {
   return props.mflList.filter((r) => r.part === name)
 })
 
+/** The panel row for a FIN, or null when the name is not an equipment model. */
+function lruRowFor(name) {
+  if (!name) return null
+  const fin = String(name).trim().toUpperCase()
+  return lruRows.value.find((r) => r.fin === fin) ?? null
+}
+
+/**
+ * Heading for the isolated target. `isolatedName` is a bare FIN for equipment models, which
+ * is accurate but hard to read, so the equipment's own label is preferred when known.
+ */
+const isolatedLabel = computed(() => {
+  const name = isolatedName.value
+  if (!name) return ''
+  return lruRowFor(name)?.label ?? name
+})
+
 watch(activeFaultNames, () => {
   // If there are faults, default to making non-faulty parts semi-transparent.
   transparentOthers.value = activeFaultNames.value.length > 0
@@ -367,9 +480,15 @@ watch([isIsolated, partDetailPanelOpen], () => {
   setTimeout(onResize, 80)
 })
 
-watch(() => props.modelUrl, (newUrl) => {
-  loadModelFromUrl(newUrl)
+watch(() => props.modelUrl, () => {
+  reloadAll()
 })
+
+watch(shellTransparent, () => updateFaultyHighlight())
+
+watch(() => props.ataChapters, () => {
+  if (modelGroup) reloadAll()
+}, { deep: true })
 
 watch(() => [props.faultyPart, props.faults], () => {
   // Aircraft changed: clear isolation, show all parts, reset the camera.
@@ -389,6 +508,7 @@ watch(() => [props.faultyPart, props.faults], () => {
   detailFaultName.value = ''
   transparentOthers.value = activeFaultNames.value.length > 0
   updateFaultyHighlight()
+  if (modelGroup) resyncEquipment()
 }, { deep: true })
 
 let scene = null
@@ -489,7 +609,7 @@ function loop() {
       if (isIsolated.value && entry.partName !== isolatedName.value) return
       const bbox = new THREE.Box3()
       modelGroup.traverse((obj) => {
-        if (obj.isMesh && meshMatchesPart(obj, entry.partName)) bbox.union(new THREE.Box3().setFromObject(obj))
+        if (obj.isMesh && meshMatchesTarget(obj, entry.partName)) bbox.union(new THREE.Box3().setFromObject(obj))
       })
       if (bbox.isEmpty()) return
       bbox.getCenter(worldPos)
@@ -548,6 +668,7 @@ function clearModel() {
   isolatedMesh = null
   faultLabels.value = []
   hoveredFaultId.value = null
+  lruRows.value.forEach((row) => { row.status = 'idle' })
   clearHover()
   if (!modelGroup) return
   while (modelGroup.children.length) {
@@ -561,10 +682,13 @@ function clearModel() {
 function meshIsFaulty(mesh) {
   const names = activeFaultNames.value
   for (const n of names) {
-    if (meshMatchesPart(mesh, n)) return true
+    if (meshMatchesTarget(mesh, n)) return true
   }
   return false
 }
+
+// Opacity of the outer shell while equipment models are shown through it.
+const SHELL_GHOST_OPACITY = 0.12
 
 function applyPartStyle(mesh) {
   const mat = mesh.material
@@ -578,14 +702,16 @@ function applyPartStyle(mesh) {
     mat.transparent = false
     mat.opacity = 1
     mat.depthWrite = true
-  } else {
-    mat.color.setHex(0xd6d9e6)
-    mat.emissive.setHex(0x000000)
-    mat.emissiveIntensity = 0
-    mat.transparent = transparentOthers.value
-    mat.opacity = transparentOthers.value ? 0.3 : 1
-    mat.depthWrite = !transparentOthers.value
+    return
   }
+  mat.color.setHex(0xd6d9e6)
+  mat.emissive.setHex(0x000000)
+  mat.emissiveIntensity = 0
+  const ghost = shellTransparent.value && mesh.userData.sourceKind === SHELL_KIND
+  const dim = ghost || transparentOthers.value
+  mat.transparent = dim
+  mat.opacity = ghost ? SHELL_GHOST_OPACITY : (transparentOthers.value ? 0.3 : 1)
+  mat.depthWrite = !dim
 }
 
 function updateFaultyHighlight() {
@@ -630,6 +756,23 @@ function onPointerLeave() {
   clearHover()
 }
 
+/**
+ * Meshes that can be picked. The outer shell is excluded: it is visual context only, and
+ * its CAD nodes (`COMPOUND016`, ...) carry no name a user could act on. Excluding it also
+ * means a click aimed at equipment inside the aircraft cannot be stolen by the skin in
+ * front of it.
+ */
+function pickableMeshes() {
+  const out = []
+  if (!modelGroup) return out
+  modelGroup.traverse((obj) => {
+    if (!obj.isMesh || !obj.visible) return
+    if (obj.userData.sourceKind === SHELL_KIND) return
+    out.push(obj)
+  })
+  return out
+}
+
 function onPointerMove(event) {
   const canvas = canvasEl.value
   if (!canvas || !raycaster || !camera || !modelGroup) return
@@ -640,11 +783,7 @@ function onPointerMove(event) {
   pointer.y = -(((event.clientY - rect.top) / rect.height) * 2 - 1)
   raycaster.setFromCamera(pointer, camera)
 
-  const meshes = []
-  modelGroup.traverse((obj) => {
-    if (obj.isMesh && obj.visible) meshes.push(obj)
-  })
-  const hits = raycaster.intersectObjects(meshes, false)
+  const hits = raycaster.intersectObjects(pickableMeshes(), false)
 
   if (!hits.length) {
     clearHover()
@@ -657,7 +796,7 @@ function onPointerMove(event) {
   // If the hovered mesh belongs to one of the faults, show that fault's card.
   let matchedId = null
   for (const e of faultEntries.value) {
-    if (meshMatchesPart(obj, e.partName)) {
+    if (meshMatchesTarget(obj, e.partName)) {
       matchedId = e.id
       break
     }
@@ -676,29 +815,24 @@ function onPointerDown(event) {
   pointer.y = -(((event.clientY - rect.top) / rect.height) * 2 - 1)
   raycaster.setFromCamera(pointer, camera)
 
-  const meshes = []
-  modelGroup.traverse((obj) => {
-    if (obj.isMesh && obj.visible) meshes.push(obj)
-  })
-  const hits = raycaster.intersectObjects(meshes, false)
+  const hits = raycaster.intersectObjects(pickableMeshes(), false)
   if (!hits.length) return
 
   const clicked = hits[0].object
   if (props.detailModelUrl && props.detailFaultyPart && meshIsFaulty(clicked)) {
     // Detail-view switch: when user clicks a faulty part, swap to the detail model.
     isDetailView.value = true
-    loadModelFromUrl(props.detailModelUrl).then(() => {
+    loadDetailModel(props.detailModelUrl).then(() => {
       detailFaultName.value = props.detailFaultyPart
       updateFaultyHighlight()
     })
     return
   }
-  // If the clicked mesh belongs to a faulty part/assembly, select the WHOLE unit
-  // (e.g. clicking "Component003" inside "Left engine" selects the whole engine).
-  // This prevents drilling into individual sub-parts of a faulty assembly.
-  const faultName = faultNameForMesh(clicked)
-  if (faultName) {
-    isolateByName(faultName)
+  // Select the WHOLE unit the mesh belongs to — the faulty assembly, or failing that the
+  // LRU model the mesh was loaded from. This prevents drilling into individual sub-shapes.
+  const target = targetNameForMesh(clicked)
+  if (target) {
+    isolateByName(target)
   } else {
     isolatePart(clicked)
   }
@@ -707,9 +841,18 @@ function onPointerDown(event) {
 // Return the fault part/assembly name that the given mesh belongs to, or '' if none.
 function faultNameForMesh(mesh) {
   for (const e of faultEntries.value) {
-    if (meshMatchesPart(mesh, e.partName)) return e.partName
+    if (meshMatchesTarget(mesh, e.partName)) return e.partName
   }
   return ''
+}
+
+/**
+ * What a click on `mesh` should select. Faults win, then the whole LRU the mesh came from,
+ * so clicking any sub-shape of an equipment model selects the equipment, never a
+ * `COMPOUND###` fragment of it.
+ */
+function targetNameForMesh(mesh) {
+  return faultNameForMesh(mesh) || mesh.userData.lruFin || ''
 }
 
 function isolatePart(mesh) {
@@ -741,7 +884,7 @@ function isolateByName(name) {
   const matches = []
   modelGroup.traverse((obj) => {
     if (!obj.isMesh) return
-    const m = meshMatchesPart(obj, name)
+    const m = meshMatchesTarget(obj, name)
     obj.visible = m
     if (m) matches.push(obj)
   })
@@ -758,7 +901,7 @@ function isolateByName(name) {
   }
 }
 
-function focusFault(faultId) {
+async function focusFault(faultId) {
   // Clicking a fault pin or a list row "drills into" that fault: isolate the whole
   // faulty unit (part or assembly) and open the detail panel.
   if (!modelGroup) return
@@ -768,18 +911,27 @@ function focusFault(faultId) {
   // If a deeper detail model exists, switch to it instead of isolating.
   if (!isDetailView.value && props.detailModelUrl && props.detailFaultyPart) {
     isDetailView.value = true
-    loadModelFromUrl(props.detailModelUrl).then(() => {
+    loadDetailModel(props.detailModelUrl).then(() => {
       detailFaultName.value = props.detailFaultyPart
       updateFaultyHighlight()
     })
     return
+  }
+
+  // The equipment may be toggled off in the panel. A fault must stay reachable from the
+  // list either way, so load it on demand instead of doing nothing.
+  const row = lruRowFor(entry.partName)
+  if (row && row.status === 'idle') {
+    await loadLruRows([row])
+    afterSceneChange()
   }
   isolateByName(entry.partName)
 }
 
 function showAllParts() {
   if (isDetailView.value) {
-    loadModelFromUrl(props.modelUrl)
+    // Back from the drill-down model: rebuild the shell + equipment composition.
+    reloadAll()
     isDetailView.value = false
     detailFaultName.value = ''
     isolatedMesh = null
@@ -821,8 +973,7 @@ function focusToBox(bbox, distanceMultiplier = activeViewConfig.value.zoom.fullM
 
 function resetView() {
   if (!modelGroup || modelGroup.children.length === 0) return
-  const bbox = new THREE.Box3().setFromObject(modelGroup)
-  if (!bbox.isEmpty()) focusToBox(bbox, activeViewConfig.value.zoom.fullModel)
+  fitToShell()
 }
 
 /**
@@ -874,6 +1025,20 @@ function meshMatchesPart(mesh, name) {
 }
 
 /**
+ * True if `mesh` belongs to the fault/selection target `name`.
+ *
+ * An LRU model is the target AS A WHOLE: its FIN names the file, not a node inside it, so
+ * the FIN match comes first. The node-name match is kept as a fallback for models whose
+ * nodes carry meaningful names.
+ */
+function meshMatchesTarget(mesh, name) {
+  if (!name || !mesh) return false
+  const fin = mesh.userData.lruFin
+  if (fin && fin === String(name).trim().toUpperCase()) return true
+  return meshMatchesPart(mesh, name)
+}
+
+/**
  * Bake a mesh's world transform into a fresh position(+normal+index)-only geometry, so
  * all geometries of one part can be merged (mergeGeometries needs matching attributes).
  *
@@ -917,19 +1082,34 @@ function normalizePartGeoms(geoms) {
 }
 
 /**
- * Render a loaded glTF/GLB into the scene.
+ * Render a loaded glTF/GLB into the scene, tagged with the source it came from.
  *
  * glTF/STEP exports often split a single part into many primitive meshes. We merge
  * all primitives that belong to the same node into ONE mesh per part, so the HMS
  * logic (fault highlight by part name, isolation, bounding-box fit) works on whole
  * parts instead of individual triangle chunks. Materials are replaced with a fresh
  * MeshStandardMaterial so per-mesh highlight/hover/transparency is safe.
+ *
+ * Several models (the outer shell plus any number of LRU models) share one `modelGroup`.
+ * The `source` tags on each mesh are what let us unload a single LRU again, ghost only the
+ * shell, and tell apart identically-named nodes coming from different files — CAD exports
+ * reuse names like `COMPOUND007` across files.
+ *
+ * `source`: { id, kind, fin?, node? }. A `node` restricts rendering to that node's subtree,
+ * which is how one chapter file holding several LRUs is split into individual units. The
+ * glTF is NOT disposed here: one file may be rendered once per LRU it contains.
  */
-function renderGltf(gltf) {
-  const root = gltf.scene || (Array.isArray(gltf.scenes) ? gltf.scenes[0] : null)
-  if (!root) throw new Error('glTF does not contain a scene.')
+function renderGltf(gltf, source) {
+  const scene = gltf.scene || (Array.isArray(gltf.scenes) ? gltf.scenes[0] : null)
+  if (!scene) throw new Error('glTF does not contain a scene.')
 
-  root.updateMatrixWorld(true)
+  scene.updateMatrixWorld(true)
+
+  const root = source.node ? findNode(scene, source.node) : scene
+  if (!root) {
+    console.warn(`[HmsViewer] Node bulunamadı: ${source.node}`)
+    return 0
+  }
 
   const partGeoms = new Map()
   const partPaths = new Map()
@@ -947,6 +1127,7 @@ function renderGltf(gltf) {
     partGeoms.get(partName).push(geom)
   })
 
+  let rendered = 0
   for (const partName of order) {
     let geoms = partGeoms.get(partName)
     if (geoms.length > 1) geoms = normalizePartGeoms(geoms)
@@ -964,52 +1145,273 @@ function renderGltf(gltf) {
     const mesh = new THREE.Mesh(merged, material)
     mesh.userData.partName = partName
     mesh.userData.partPath = partPaths.get(partName) || [partName]
+    mesh.userData.sourceId = source.id
+    mesh.userData.sourceKind = source.kind
+    if (source.fin) mesh.userData.lruFin = source.fin
     modelGroup.add(mesh)
     meshesCount.value += 1
+    rendered += 1
   }
 
-  // Free the original (now-unused) glTF scene resources.
-  root.traverse((obj) => {
-    if (obj.isMesh) {
-      obj.geometry?.dispose()
-      if (obj.material) {
-        if (Array.isArray(obj.material)) obj.material.forEach((m) => m.dispose())
-        else obj.material.dispose()
-      }
-    }
-  })
-
-  partNames.value = order.slice().sort((a, b) => a.localeCompare(b))
-
-  transparentOthers.value = activeFaultNames.value.length > 0
-  updateFaultyHighlight()
-
-  modelGroup.updateMatrixWorld(true)
-  const fitBox = new THREE.Box3().setFromObject(modelGroup)
-  if (!fitBox.isEmpty()) focusToBox(fitBox, activeViewConfig.value.zoom.fullModel)
+  return rendered
 }
 
-async function loadModelFromUrl(url) {
+/**
+ * Find a node by its ORIGINAL glTF name. GLTFLoader keeps that name in `userData.name`
+ * and puts a sanitized copy in `name`, so both are checked.
+ */
+function findNode(root, name) {
+  let match = null
+  root.traverse((obj) => {
+    if (match) return
+    if (obj.userData?.name === name || obj.name === name) match = obj
+  })
+  return match
+}
+
+/** Free the resources of a loaded glTF once every unit has been rendered out of it. */
+function disposeGltf(gltf) {
+  const scene = gltf.scene || (Array.isArray(gltf.scenes) ? gltf.scenes[0] : null)
+  scene?.traverse((obj) => {
+    if (!obj.isMesh) return
+    obj.geometry?.dispose()
+    if (obj.material) {
+      if (Array.isArray(obj.material)) obj.material.forEach((m) => m.dispose())
+      else obj.material.dispose()
+    }
+  })
+}
+
+/**
+ * Load `url` once and render every source listed for it. Passing several sources matters
+ * for chapter files: three faulty actuators out of one `ATA-27.glb` cost a single download
+ * and parse instead of three.
+ *
+ * Returns the set of source ids that actually produced geometry.
+ */
+async function loadBundle(url, sources) {
+  const loaded = new Set()
+  if (!url || !sources.length) return loaded
+  try {
+    const gltf = await gltfLoader.loadAsync(url)
+    for (const source of sources) {
+      if (renderGltf(gltf, source) > 0) loaded.add(source.id)
+    }
+    disposeGltf(gltf)
+  } catch (e) {
+    // An equipment model that is not on disk yet must not take the whole viewer down.
+    console.warn(`[HmsViewer] Model yüklenemedi: ${url}`, e)
+  }
+  return loaded
+}
+
+function unloadSource(sourceId) {
+  if (!modelGroup) return
+  const doomed = modelGroup.children.filter((o) => o.userData?.sourceId === sourceId)
+  for (const obj of doomed) {
+    if (obj === hoveredMesh) clearHover()
+    modelGroup.remove(obj)
+    disposeObject(obj)
+  }
+  meshesCount.value = Math.max(0, meshesCount.value - doomed.length)
+}
+
+function refreshPartNames() {
+  const names = new Set()
+  modelGroup?.children.forEach((o) => {
+    if (o.isMesh && o.userData.partName) names.add(o.userData.partName)
+  })
+  partNames.value = Array.from(names).sort((a, b) => a.localeCompare(b))
+}
+
+/** Bounding box of the outer shell only, so camera framing does not depend on which
+ *  chapters happen to be loaded. Falls back to the whole group if no shell is present. */
+function shellBox() {
+  const box = new THREE.Box3()
+  modelGroup?.children.forEach((o) => {
+    if (o.isMesh && o.userData.sourceKind === SHELL_KIND) {
+      box.union(new THREE.Box3().setFromObject(o))
+    }
+  })
+  return box
+}
+
+/**
+ * Clip planes and zoom limits have to follow the model's own scale. These CAD exports are
+ * roughly 0.4 units across, where a fixed near plane of 0.1 would clip the aircraft and
+ * make small equipment impossible to zoom into. The near/far ratio is kept modest to avoid
+ * depth-buffer artefacts.
+ */
+function applyCameraScale(maxDim) {
+  if (!camera || !controls || !(maxDim > 0)) return
+  camera.near = maxDim / 500
+  camera.far = maxDim * 100
+  camera.updateProjectionMatrix()
+  controls.minDistance = maxDim / 200
+  controls.maxDistance = maxDim * 50
+}
+
+function fitToShell() {
+  if (!modelGroup) return
+  modelGroup.updateMatrixWorld(true)
+  let box = shellBox()
+  if (box.isEmpty()) box = new THREE.Box3().setFromObject(modelGroup)
+  if (box.isEmpty()) return
+  const size = new THREE.Vector3()
+  box.getSize(size)
+  applyCameraScale(Math.max(size.x, size.y, size.z))
+  focusToBox(box, activeViewConfig.value.zoom.fullModel)
+}
+
+function afterSceneChange() {
+  refreshPartNames()
+  setWireframe(wireframe.value)
+  updateFaultyHighlight()
+  statusText.value = statusLine()
+}
+
+function statusLine() {
+  const base = `Loaded. Mesh count: ${meshesCount.value}`
+  const total = lruRows.value.length
+  if (!total) return base
+  const loaded = lruRows.value.filter((r) => r.status === 'loaded').length
+  return `${base} — equipment: ${loaded}/${total}`
+}
+
+/** Rebuild the panel: one row per LRU model, grouped under its ATA chapter. */
+function buildPanelRows() {
+  const faulty = faultyFins.value
+  const groups = []
+  const flat = []
+
+  for (const chapter of props.ataChapters) {
+    const rows = (Array.isArray(chapter.models) ? chapter.models : []).map((model) => {
+      const fin = String(model.fin ?? '').trim().toUpperCase()
+      const row = {
+        fin,
+        label: model.label || fin,
+        url: model.url,
+        // Empty for a per-LRU file; set when several LRUs share one chapter file.
+        node: model.node || '',
+        hasFault: faulty.has(fin),
+        status: 'idle'
+      }
+      flat.push(row)
+      return row
+    })
+    if (!rows.length) continue
+    groups.push({
+      code: String(chapter.code),
+      label: chapter.label || `ATA ${chapter.code}`,
+      rows,
+      hasFault: rows.some((r) => r.hasFault)
+    })
+  }
+
+  chapterGroups.value = groups
+  lruRows.value = flat
+}
+
+function lruSource(row) {
+  return { id: lruSourceId(row.fin), kind: LRU_KIND, fin: row.fin, node: row.node }
+}
+
+/**
+ * Load the given rows, batched per file so that LRUs sharing a chapter file are downloaded
+ * and parsed only once. Rows whose geometry never arrived are marked `missing`, which keeps
+ * them visible but disabled instead of failing silently.
+ */
+async function loadLruRows(rows) {
+  const byUrl = new Map()
+  for (const row of rows) {
+    row.status = 'loading'
+    if (!byUrl.has(row.url)) byUrl.set(row.url, [])
+    byUrl.get(row.url).push(row)
+  }
+
+  for (const [url, group] of byUrl) {
+    const loaded = await loadBundle(url, group.map(lruSource))
+    for (const row of group) {
+      row.status = loaded.has(lruSourceId(row.fin)) ? 'loaded' : 'missing'
+    }
+  }
+}
+
+async function toggleLru(row) {
+  if (row.status === 'loading' || row.status === 'missing') return
+  if (row.status === 'loaded') {
+    unloadSource(lruSourceId(row.fin))
+    row.status = 'idle'
+  } else {
+    await loadLruRows([row])
+  }
+  afterSceneChange()
+}
+
+function lruStatusText(row) {
+  if (row.status === 'loading') return 'loading…'
+  if (row.status === 'missing') return 'no model'
+  if (row.hasFault) return 'fault'
+  return row.status === 'loaded' ? 'shown' : ''
+}
+
+/**
+ * Full (re)load: outer shell first, so the camera can be framed on it, then every LRU that
+ * has a fault in this flight.
+ */
+async function reloadAll() {
+  if (!props.modelUrl) return
+  errorText.value = ''
+  statusText.value = 'Loading model...'
+  clearModel()
+  buildPanelRows()
+
+  const shellLoaded = await loadBundle(props.modelUrl, [{ id: SHELL_SOURCE_ID, kind: SHELL_KIND }])
+  if (!shellLoaded.size) {
+    errorText.value = `Model yüklenemedi: ${props.modelUrl}`
+    statusText.value = ''
+    return
+  }
+  transparentOthers.value = activeFaultNames.value.length > 0
+  fitToShell()
+
+  await loadLruRows(lruRows.value.filter((r) => r.hasFault))
+  afterSceneChange()
+}
+
+/**
+ * Faults changed for the same aircraft: swap the equipment models without reloading the
+ * shell, so what is on screen always matches the current fault set.
+ */
+async function resyncEquipment() {
+  for (const row of lruRows.value) {
+    if (row.status === 'loaded') unloadSource(lruSourceId(row.fin))
+  }
+  buildPanelRows()
+  await loadLruRows(lruRows.value.filter((r) => r.hasFault))
+  afterSceneChange()
+}
+
+/** Drill-down path: replace the whole scene with the deeper `detailModelUrl` model. */
+async function loadDetailModel(url) {
   if (!url) return
   errorText.value = ''
   statusText.value = 'Loading model...'
   clearModel()
-  try {
-    const gltf = await gltfLoader.loadAsync(url)
-    renderGltf(gltf)
-    setWireframe(wireframe.value)
-    statusText.value = `Loaded. Mesh count: ${meshesCount.value}`
-  } catch (e) {
-    console.error(e)
-    errorText.value = e?.message || String(e)
+  const loaded = await loadBundle(url, [{ id: SHELL_SOURCE_ID, kind: SHELL_KIND }])
+  if (!loaded.size) {
+    errorText.value = `Model yüklenemedi: ${url}`
     statusText.value = ''
+    return
   }
+  fitToShell()
+  afterSceneChange()
 }
 
 onMounted(() => {
   initThree()
   disposeStageBg = observeStageBackground(() => scene, () => stageRef.value)
-  loadModelFromUrl(props.modelUrl)
+  reloadAll()
 })
 
 onBeforeUnmount(() => {
@@ -1267,6 +1669,156 @@ onBeforeUnmount(() => {
   opacity: 1;
   box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.25), 0 2px 8px rgba(185, 28, 28, 0.5);
   z-index: 8;
+}
+
+/*
+ * Sits below the ViewCube, which is anchored top-right at 132px + 10px offset
+ * (see `viewportGizmoConfig.ts`); overlapping it would block the cube's clicks.
+ */
+.chapter-panel {
+  position: absolute;
+  top: 154px;
+  right: 12px;
+  width: 232px;
+  max-height: calc(100% - 166px);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  box-shadow: 0 6px 20px var(--shadow-color);
+  overflow: hidden;
+  z-index: 9;
+}
+
+.chapter-panel-title {
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.chapter-list {
+  padding: 4px;
+  overflow-y: auto;
+}
+
+.chapter-group + .chapter-group {
+  margin-top: 6px;
+  border-top: 1px solid var(--border-color);
+  padding-top: 6px;
+}
+
+.chapter-group-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+}
+
+.chapter-code {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.chapter-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chapter-group-title.has-fault .chapter-code,
+.chapter-group-title.has-fault .chapter-name {
+  color: #ef4444;
+}
+
+.lru-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lru-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: 8px;
+}
+
+.lru-item.has-fault {
+  background: rgba(220, 38, 38, 0.1);
+}
+
+.lru-item.is-missing {
+  opacity: 0.5;
+}
+
+.lru-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.lru-item.is-missing .lru-label {
+  cursor: not-allowed;
+}
+
+.lru-check {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  accent-color: #2563eb;
+  cursor: inherit;
+}
+
+.lru-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lru-fin {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.lru-status {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+}
+
+.lru-item.has-fault .lru-status {
+  color: #ef4444;
 }
 
 .fault-list-panel {

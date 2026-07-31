@@ -42,6 +42,23 @@ export async function getFilteredMflData(flightId: string): Promise<MflRecord[]>
   return list ?? []
 }
 
+/**
+ * Bir MFL kaydının ATA chapter kodunu çözer. Sırayla:
+ *
+ *   1. Backend'in `ataChapter` alanı (eklendiğinde tek doğru kaynak olur).
+ *   2. FIN numarasının ilk iki hanesi — "2400MG001" -> "24". Ekipman GLB dosyaları da
+ *      FIN'e göre adlandırıldığı için asıl sözleşme budur.
+ *   3. `faultCode`'un ilk iki hanesi — "32-021" -> "32". Eski/adlandırılmamış kayıtlar için.
+ */
+export function resolveAtaChapter(row: MflRecord): string {
+  const explicit = String(row.ataChapter ?? '').trim()
+  if (explicit) return explicit
+  const fromFin = String(row.finNumber ?? '').trim().match(/^(\d{2})/)
+  if (fromFin) return fromFin[1]
+  const fromCode = String(row.faultCode ?? '').trim().match(/^(\d{2})/)
+  return fromCode ? fromCode[1] : ''
+}
+
 export function mflListToFaults(mflList: MflRecord[]): Fault[] {
   if (!Array.isArray(mflList) || !mflList.length) return []
   const byPart = new Map<string, Fault>()
@@ -55,10 +72,14 @@ export function mflListToFaults(mflList: MflRecord[]): Fault[] {
         fin: part,
         status: row.severity ?? 'FAULT',
         warningFaults: row.description ?? '',
+        ataChapter: resolveAtaChapter(row),
         records: []
       })
     }
-    byPart.get(part)!.records.push(normalizeMflRecord(row))
+    const fault = byPart.get(part)!
+    // Aynı parçanın ilk kaydında chapter yoksa sonraki kayıtlardan tamamlanır.
+    if (!fault.ataChapter) fault.ataChapter = resolveAtaChapter(row)
+    fault.records.push(normalizeMflRecord(row))
   }
   return Array.from(byPart.values())
 }
@@ -67,6 +88,7 @@ export function normalizeMflRecord(row: MflRecord): NormalizedMflRecord {
   return {
     part: row.finNumber,
     finNumber: row.finNumber,
+    ataChapter: resolveAtaChapter(row),
     MFL_Id: row.faultCode ?? '—',
     MFL_Field_Name: row.category ?? '—',
     MFL_Description: row.description ?? '—',

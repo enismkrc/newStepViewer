@@ -1,4 +1,4 @@
-import type { ViewConfigPartial } from './view-types'
+import type { ViewConfigPartial } from './view-types.ts'
 
 export interface Fleet {
   id: string
@@ -44,11 +44,17 @@ export interface MflRecord {
   severity?: string
   category?: string
   description?: string
+  /**
+   * ATA chapter code (örn. "32"). Backend bu alanı doldurmuyorsa `faultCode`'un
+   * ilk iki hanesinden türetilir (bkz. `resolveAtaChapter` @/api/mfl).
+   */
+  ataChapter?: string
 }
 
 export interface NormalizedMflRecord {
   part?: string
   finNumber?: string
+  ataChapter?: string
   MFL_Id: string
   MFL_Field_Name: string
   MFL_Description: string
@@ -66,6 +72,8 @@ export interface Fault {
   fin: string
   status: string
   warningFaults: string
+  /** Bu arızanın ait olduğu ATA chapter kodu (örn. "32"). Bilinmiyorsa boş. */
+  ataChapter?: string
   records: NormalizedMflRecord[]
 }
 

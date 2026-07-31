@@ -1,48 +1,29 @@
 {
+  "_comment": "part = MFL kaydındaki finNumber ile eşleşir (ekipman GLB dosyasının FIN numarası).",
   "aircraft-1": [
     {
-      "part": "Left engine",
-      "LRU_Instance_Name": "F414-GE-400 Left Propulsion LRU",
-      "LRU_Serial_No": "LRU-ENG-L-28471001"
+      "part": "2400MG001",
+      "LRU_Instance_Name": "Right Wingtip Store Interface LRU",
+      "LRU_Serial_No": "LRU-WS-R-2400MG001"
     },
     {
-      "part": "Landing gear",
-      "LRU_Instance_Name": "Nose & Main Landing Gear Control LRU",
-      "LRU_Serial_No": "LRU-LG-32101003"
-    },
-    {
-      "part": "R_Rudder",
-      "LRU_Instance_Name": "Right Rudder Actuator LRU",
-      "LRU_Serial_No": "LRU-FCS-RUD-R-27410002"
-    },
-    {
-      "part": "L_Flaperon",
-      "LRU_Instance_Name": "Left Flaperon Actuator LRU",
-      "LRU_Serial_No": "LRU-FCS-FLP-L-27155001"
-    },
-    {
-      "part": "Cockpit",
-      "LRU_Instance_Name": "Integrated Avionics Display LRU",
-      "LRU_Serial_No": "LRU-AV-CDU-31220007"
-    },
-    {
-      "part": "IRIS-T003",
-      "LRU_Instance_Name": "IRIS-T Store Interface LRU",
-      "LRU_Serial_No": "LRU-WS-IRIS-94110004"
+      "part": "2400MG002",
+      "LRU_Instance_Name": "Left Wingtip Store Interface LRU",
+      "LRU_Serial_No": "LRU-WS-L-2400MG002"
     }
   ],
   "aircraft-2": [
     {
-      "part": "Nose Landing gear",
-      "LRU_Instance_Name": "Nose Landing Gear WOW Sensor LRU",
-      "LRU_Serial_No": "LRU-LG-NOSE-32101002"
+      "part": "2400MG002",
+      "LRU_Instance_Name": "Left Wingtip Store Interface LRU",
+      "LRU_Serial_No": "LRU-WS-L-2400MG002"
     }
   ],
   "aircraft-5": [
     {
-      "part": "Right engine",
-      "LRU_Instance_Name": "F414-GE-400 Right Propulsion LRU",
-      "LRU_Serial_No": "LRU-ENG-R-28472001"
+      "part": "2400MG001",
+      "LRU_Instance_Name": "Right Wingtip Store Interface LRU",
+      "LRU_Serial_No": "LRU-WS-R-2400MG001"
     }
   ]
 }

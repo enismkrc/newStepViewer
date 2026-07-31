@@ -20,6 +20,7 @@
           :key="`${aircraft.id}-${flightId}`"
           :model-url="model.modelUrl"
           :view-config="model.viewConfig"
+          :ata-chapters="ataChapters"
           :faults="faults"
           :mfl-list="mflList"
           :lru-list="[]"
@@ -36,6 +37,7 @@ import { getAircraftById } from '../api/fleet'
 import { findFlightsByAircraftId } from '../api/flight'
 import { getFilteredMflData, mflListToFaults, flattenMflForViewer } from '../api/mfl'
 import { attachModel } from '../config/modelRegistry'
+import { resolveLruModels, groupByChapter } from '../config/ataChapterRegistry'
 import HmsViewer from '../components/HmsViewer.vue'
 import Button from 'primevue/button'
 
@@ -56,6 +58,13 @@ const model = computed(() => {
   if (!ac) return { modelUrl: '', viewConfig: null }
   return { modelUrl: ac.modelUrl || '', viewConfig: ac.viewConfig ?? null }
 })
+
+/**
+ * Bu uçak için bulunan ekipman (LRU) modelleri, ATA chapter başlıkları altında gruplanmış.
+ * Dış kabuğun içine yüklenirler; hangi dosyaların var olduğu `npm run models:scan` ile
+ * public/ klasöründen türetilir.
+ */
+const ataChapters = computed(() => groupByChapter(resolveLruModels(aircraft.value)))
 
 async function loadViewerData(aircraftId, fId) {
   loading.value = true

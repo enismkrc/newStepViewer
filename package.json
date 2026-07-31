@@ -4,9 +4,14 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "models:scan": "node scripts/scan-models.mjs",
+    "models:inspect": "node scripts/inspect-glb.mjs",
+    "predev": "npm run models:scan",
     "dev": "vite",
+    "prebuild": "npm run models:scan",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
+    "pretype-check": "npm run models:scan",
     "type-check": "vue-tsc --noEmit"
   },
   "dependencies": {
