@@ -29,7 +29,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { getAircraftById } from '../api/fleet'
@@ -38,26 +38,28 @@ import { getFilteredMflData, mflListToFaults, flattenMflForViewer } from '../api
 import { attachModel } from '../config/modelRegistry'
 import HmsViewer from '../components/HmsViewer.vue'
 import Button from 'primevue/button'
+import type { Aircraft, Fault, NormalizedMflRecord } from '@/types/api-types'
+import type { ViewConfigPartial } from '@/types/view-types'
 
 const route = useRoute()
 
-const aircraft = ref(null)
-const mflList = ref([])
-const faults = ref([])
+const aircraft = ref<Aircraft | null>(null)
+const mflList = ref<NormalizedMflRecord[]>([])
+const faults = ref<Fault[]>([])
 const flightLabel = ref('')
 const loading = ref(true)
 const loadError = ref('')
 
-const flightId = computed(() => route.params.flightId)
+const flightId = computed(() => String(route.params.flightId ?? ''))
 
 /** modelUrl/viewConfig attachModel ile loadViewerData içinde zenginleştirilir. */
-const model = computed(() => {
+const model = computed<{ modelUrl: string; viewConfig: ViewConfigPartial | null }>(() => {
   const ac = aircraft.value
   if (!ac) return { modelUrl: '', viewConfig: null }
   return { modelUrl: ac.modelUrl || '', viewConfig: ac.viewConfig ?? null }
 })
 
-async function loadViewerData(aircraftId, fId) {
+async function loadViewerData(aircraftId: string, fId: string) {
   loading.value = true
   loadError.value = ''
   mflList.value = []
@@ -65,8 +67,8 @@ async function loadViewerData(aircraftId, fId) {
   flightLabel.value = ''
   try {
     // Ana projede fleet.js kullanılmıyorsa giriş ekranı uçağı router state ile geçirir.
-    const fromState = history.state?.aircraft
-    const stateAircraft =
+    const fromState = history.state?.aircraft as Aircraft | undefined
+    const stateAircraft: Aircraft | null =
       fromState && String(fromState.id) === String(aircraftId) ? fromState : null
 
     const [acRaw, flightRows, mflRaw] = await Promise.all([
@@ -94,7 +96,7 @@ async function loadViewerData(aircraftId, fId) {
 }
 
 watch(
-  () => [route.params.aircraftId, route.params.flightId],
+  () => [String(route.params.aircraftId ?? ''), String(route.params.flightId ?? '')],
   ([aircraftId, fId]) => {
     if (aircraftId && fId) loadViewerData(aircraftId, fId)
   },

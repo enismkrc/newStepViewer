@@ -93,21 +93,24 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { useRouter } from 'vue-router'
+import type { HistoryState } from 'vue-router'
 import { computed, ref, onMounted } from 'vue'
 import Select from 'primevue/select'
+import type { SelectChangeEvent } from 'primevue/select'
 import Button from 'primevue/button'
 import { findAllFleets, findAircraftByFleetId } from '../api/fleet'
 import { findFlightsByAircraftId } from '../api/flight'
 import { attachModel } from '../config/modelRegistry'
+import type { Aircraft, Fleet, Flight } from '@/types/api-types'
 
 const router = useRouter()
 
 // Tüm filolar tek seferde alınır; base ve fleet listeleri bundan TÜRETİLİR.
-const allFleets = ref([])
-const aircraftList = ref([])
-const flights = ref([])
+const allFleets = ref<Fleet[]>([])
+const aircraftList = ref<Aircraft[]>([])
+const flights = ref<Flight[]>([])
 
 const loadingFleets = ref(true)
 const loadingAircraft = ref(false)
@@ -121,7 +124,7 @@ const selectedFlightId = ref('')
 
 // Fleet response'undaki `base` alanından benzersiz base listesi (alfabetik).
 const bases = computed(() => {
-  const set = new Set()
+  const set = new Set<string>()
   for (const f of allFleets.value) {
     const b = (f.base ?? '').trim()
     if (b) set.add(b)
@@ -167,7 +170,7 @@ onMounted(async () => {
 })
 
 // PrimeVue Select @change payload: { originalEvent, value }
-function onBaseChange(e) {
+function onBaseChange(e: SelectChangeEvent) {
   selectedBase.value = e.value
   selectedFleetId.value = ''
   selectedAircraftId.value = ''
@@ -176,7 +179,7 @@ function onBaseChange(e) {
   flights.value = []
 }
 
-async function onFleetChange(e) {
+async function onFleetChange(e: SelectChangeEvent) {
   selectedFleetId.value = e.value
   selectedAircraftId.value = ''
   selectedFlightId.value = ''
@@ -195,7 +198,7 @@ async function onFleetChange(e) {
   }
 }
 
-async function onAircraftChange(e) {
+async function onAircraftChange(e: SelectChangeEvent) {
   selectedAircraftId.value = e.value
   selectedFlightId.value = ''
   flights.value = []
@@ -212,7 +215,7 @@ async function onAircraftChange(e) {
   }
 }
 
-function onFlightChange(e) {
+function onFlightChange(e: SelectChangeEvent) {
   selectedFlightId.value = e.value
 }
 
@@ -240,7 +243,7 @@ function goToView() {
       flightId: selectedFlightId.value
     },
     // fleet.js kullanılmasa bile viewer'da modelUrl garanti edilir.
-    state: { aircraft: attachModel(ac) }
+    state: { aircraft: attachModel(ac ?? null) as unknown as HistoryState }
   })
 }
 </script>

@@ -11,7 +11,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import GlbUploadViewer from '../components/GlbUploadViewer.vue'
 import { MODEL_REGISTRY } from '../config/modelRegistry'
 

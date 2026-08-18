@@ -1,5 +1,5 @@
 /** Shared ViewCube settings (HMS + GLB preview). */
-import type { PerspectiveCamera, WebGLRenderer } from 'three'
+import type { Object3D, PerspectiveCamera, WebGLRenderer } from 'three'
 import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import type { ViewportGizmo } from 'three-viewport-gizmo'
 
@@ -16,15 +16,18 @@ interface FaceStyle {
   label?: string
 }
 
-interface GizmoMesh {
+type GizmoMesh = Object3D & {
   isMesh?: boolean
   isSprite?: boolean
   material?: { opacity: number; transparent: boolean }
 }
 
 interface GizmoInstance {
+  /** ViewCube animasyonu sürerken true; bu sırada OrbitControls devre dışı kalır. */
+  animating: boolean
   traverse: (callback: (obj: GizmoMesh) => void) => void
   render: () => unknown
+  update: () => unknown
   dispose: () => void
   attachControls: (controls: OrbitControls) => void
 }
@@ -151,4 +154,4 @@ export function createViewportGizmo(
   return gizmo
 }
 
-export type { ViewportGizmo }
+export type { ViewportGizmo, GizmoInstance }

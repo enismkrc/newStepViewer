@@ -168,21 +168,60 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import type { PropType } from 'vue'
 import Button from 'primevue/button'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { ViewportGizmo } from 'three-viewport-gizmo'
 import { createViewportGizmo } from '../three/viewportGizmoConfig'
+import type { GizmoInstance } from '../three/viewportGizmoConfig'
 import '../three/viewportGizmo.css'
 import { mergeViewConfig, applyModelOrientation, frameCameraOnBox } from '../three/defaultView'
 import { observeStageBackground, readStageColor } from '../three/sceneBackground'
+import { disposeMaterial, isMesh, setMaterialWireframe, standardMaterialOf } from '../three/meshUtils'
+import type { DisposableObject } from '../three/meshUtils'
+import type { Fault, LruRecord, NormalizedMflRecord } from '@/types/api-types'
+import type { ViewConfigPartial } from '@/types/view-types'
+
+/** Normalized fault definition, from either the `faults` array or `faultyPart`. */
+interface FaultDef {
+  part: string
+  type: string | null
+  fin?: string
+  status?: string
+  warningFaults?: string
+}
+
+/** Compact fault summary shown in the hover card and the part detail panel. */
+interface FaultCard {
+  fin: string
+  lruName: string
+  mflId: string
+  description: string
+}
+
+interface FaultEntry {
+  id: string
+  partName: string
+  card: FaultCard
+}
+
+/** A fault's numbered pin, positioned in screen space over the canvas. */
+interface FaultLabel {
+  id: string
+  num: number
+  x: number
+  y: number
+  card: FaultCard
+}
 
 // 3D sahne arka planı --stage-bg CSS değişkeninden okunur (ana projenin temasına uyar).
-let disposeStageBg = null
+let disposeStageBg: (() => void) | null = null
 
 /**
  * HMS (Health Management System) viewer (Three.js)
@@ -199,40 +238,40 @@ const props = defineProps({
    * Name of the part that should be treated as "faulty" and highlighted in red.
    * This is passed from the parent page (selected aircraft).
    */
-  faultyPart: { type: String, default: null },
+  faultyPart: { type: String as PropType<string | null>, default: null },
   /**
    * Optional fault type. Used by UI text for the fault overlay card.
    */
-  faultType: { type: String, default: null },
+  faultType: { type: String as PropType<string | null>, default: null },
   /**
    * Optional: a second model URL for a detailed view (e.g. engine-only model).
    */
-  detailModelUrl: { type: String, default: null },
+  detailModelUrl: { type: String as PropType<string | null>, default: null },
   /**
    * Optional: the faulty part name inside the detail model.
    */
-  detailFaultyPart: { type: String, default: null },
+  detailFaultyPart: { type: String as PropType<string | null>, default: null },
   /**
    * Optional: multiple faults for one aircraft. Each item:
    * { part: string, type?: string, fin?: string, status?: string, warningFaults?: string }
    * `part` may be a leaf part OR an assembly name (whole assembly highlights red).
    * When provided, this takes precedence over the single `faultyPart`/`faultType`.
    */
-  faults: { type: Array, default: () => [] },
+  faults: { type: Array as PropType<Fault[]>, default: () => [] },
   /** LRU records for this aircraft (from API). Linked to parts via `part` field. */
-  lruList: { type: Array, default: () => [] },
+  lruList: { type: Array as PropType<LruRecord[]>, default: () => [] },
   /** MFL records for this aircraft (from API). Linked to parts via `part` field. */
-  mflList: { type: Array, default: () => [] },
+  mflList: { type: Array as PropType<NormalizedMflRecord[]>, default: () => [] },
   /**
    * Optional per-aircraft viewer tuning (from API / mock JSON).
    * { modelRotation?: {x,y,z}, cameraOffset?: {x,y,z}, zoom?: {...}, swapFrontBack?: boolean }
    */
-  viewConfig: { type: Object, default: null }
+  viewConfig: { type: Object as PropType<ViewConfigPartial | null>, default: null }
 })
 
 const activeViewConfig = computed(() => mergeViewConfig(props.viewConfig))
 
-const canvasEl = ref(null)
+const canvasEl = ref<HTMLCanvasElement | null>(null)
 const statusText = ref('Loading model...')
 const errorText = ref('')
 const wireframe = ref(false)
@@ -245,8 +284,8 @@ const isolatedPartName = ref('')
 // assembly name (the whole unit is isolated, not an individual sub-part).
 const isolatedName = ref('')
 const partDetailPanelOpen = ref(false)
-const partNames = ref([])
-const stageRef = ref(null)
+const partNames = ref<string[]>([])
+const stageRef = ref<HTMLElement | null>(null)
 const transparentOthers = ref(false)
 const isDetailView = ref(false)
 // When a detail model is loaded, this holds the single faulty part name inside it.
@@ -256,24 +295,24 @@ const detailFaultName = ref('')
 const viewOnly = computed(() => isIsolated.value || isDetailView.value)
 // Screen-space overlay labels for every fault (named parts).
 // Each: { id, num, x, y, card: { fin, partName, status, warningFaults } }
-const faultLabels = ref([])
+const faultLabels = ref<FaultLabel[]>([])
 // Which fault's detail card to show. Purely hover-driven: a card is shown only while
 // the cursor is over that fault's pin, its list row, or its 3D object. When the cursor
 // is not over any fault, no card is shown.
-const hoveredFaultId = ref(null)
+const hoveredFaultId = ref<string | null>(null)
 const shownFaultId = computed(() => hoveredFaultId.value)
 
 /**
  * Normalized list of fault definitions for the current aircraft. Supports either the
  * multi-fault `faults` array or the single `faultyPart`/`faultType` props.
  */
-const faultDefs = computed(() => {
-  const raw = (Array.isArray(props.faults) && props.faults.length)
+const faultDefs = computed<FaultDef[]>(() => {
+  const raw: Partial<Fault>[] = (Array.isArray(props.faults) && props.faults.length)
     ? props.faults
-    : (props.faultyPart ? [{ part: props.faultyPart, type: props.faultType }] : [])
+    : (props.faultyPart ? [{ part: props.faultyPart, type: props.faultType ?? undefined }] : [])
   // De-duplicate by part name while preserving order.
-  const seen = new Set()
-  const out = []
+  const seen = new Set<string>()
+  const out: FaultDef[] = []
   for (const f of raw) {
     if (!f || !f.part || seen.has(f.part)) continue
     seen.add(f.part)
@@ -292,7 +331,7 @@ const activeFaultNames = computed(() => {
  * Fault list driving the side panel, the numbered pins and the hover detail cards.
  * Faults are always tied to a real, named part/assembly inside the model.
  */
-const faultEntries = computed(() => {
+const faultEntries = computed<FaultEntry[]>(() => {
   if (isDetailView.value) {
     return detailFaultName.value
       ? [{ id: 'part:' + detailFaultName.value, partName: detailFaultName.value, card: makeFaultCard(detailFaultName.value, null) }]
@@ -314,7 +353,7 @@ const activeFaultLabel = computed(() => {
   return faultLabels.value.find((l) => l.id === id) || null
 })
 
-function statusClass(status) {
+function statusClass(status: string | null | undefined) {
   return /fault/i.test(status || '') ? 'is-fault' : 'is-warning'
 }
 
@@ -322,8 +361,7 @@ function statusClass(status) {
  * Build a compact fault summary card from aircraft fault + LRU/MFL API data.
  * Shown on hover (pin / list row). Full detail is in the part detail panel.
  */
-function makeFaultCard(part, type, override = {}) {
-  if (!part) return null
+function makeFaultCard(part: string, _type: string | null, override: Partial<FaultDef> = {}): FaultCard {
   const mflRecords = props.mflList.filter((r) => r.part === part || r.finNumber === part)
   const primaryMfl = mflRecords[0] ?? null
   return {
@@ -375,9 +413,8 @@ watch(() => [props.faultyPart, props.faults], () => {
   // Aircraft changed: clear isolation, show all parts, reset the camera.
   if (modelGroup) {
     modelGroup.traverse((obj) => {
-      if (obj.isMesh) obj.visible = true
+      if (isMesh(obj)) obj.visible = true
     })
-    isolatedMesh = null
     isIsolated.value = false
     isolatedPartName.value = ''
     isolatedName.value = ''
@@ -391,17 +428,16 @@ watch(() => [props.faultyPart, props.faults], () => {
   updateFaultyHighlight()
 }, { deep: true })
 
-let scene = null
-let camera = null
-let renderer = null
-let controls = null
-let modelGroup = null
-let rafId = null
-let raycaster = null
-let pointer = null
-let hoveredMesh = null
-let isolatedMesh = null
-let viewportGizmo = null
+let scene: THREE.Scene | null = null
+let camera: THREE.PerspectiveCamera | null = null
+let renderer: THREE.WebGLRenderer | null = null
+let controls: OrbitControls | null = null
+let modelGroup: THREE.Group | null = null
+let rafId: number | null = null
+let raycaster: THREE.Raycaster | null = null
+let pointer: THREE.Vector2 | null = null
+let hoveredMesh: THREE.Mesh | null = null
+let viewportGizmo: GizmoInstance | null = null
 const gltfLoader = new GLTFLoader()
 
 function initViewportGizmo() {
@@ -481,19 +517,18 @@ function loop() {
   if (entries.length && modelGroup && camera && canvasEl.value) {
     const canvas = canvasEl.value
     const rect = canvas.getBoundingClientRect()
-    const stage = canvas.parentElement
-    const stageRect = stage.getBoundingClientRect()
-    const labels = []
+    const stageRect = (canvas.parentElement ?? canvas).getBoundingClientRect()
+    const labels: FaultLabel[] = []
     entries.forEach((entry, idx) => {
       // Named part: use the union bounding box center of matching meshes.
       if (isIsolated.value && entry.partName !== isolatedName.value) return
       const bbox = new THREE.Box3()
-      modelGroup.traverse((obj) => {
-        if (obj.isMesh && meshMatchesPart(obj, entry.partName)) bbox.union(new THREE.Box3().setFromObject(obj))
+      modelGroup!.traverse((obj) => {
+        if (isMesh(obj) && meshMatchesPart(obj, entry.partName)) bbox.union(new THREE.Box3().setFromObject(obj))
       })
       if (bbox.isEmpty()) return
       bbox.getCenter(worldPos)
-      ndc.copy(worldPos).project(camera)
+      ndc.copy(worldPos).project(camera!)
       // Skip faults that are behind the camera.
       if (ndc.z > 1) return
       const px = rect.left + (ndc.x + 1) * 0.5 * rect.width
@@ -511,14 +546,14 @@ function loop() {
     faultLabels.value = []
   }
 
-  renderer?.render(scene, camera)
+  if (renderer && scene && camera) renderer.render(scene, camera)
   viewportGizmo?.render()
 }
 
 function onResize() {
   const canvas = canvasEl.value
-  if (!canvas || !camera || !renderer) return
-  const parent = canvas.parentElement
+  const parent = canvas?.parentElement
+  if (!canvas || !camera || !renderer || !parent) return
   const width = parent.clientWidth
   const height = parent.clientHeight
   renderer.setSize(width, height, false)
@@ -527,14 +562,12 @@ function onResize() {
   viewportGizmo?.update()
 }
 
-function disposeObject(obj) {
+function disposeObject(obj: THREE.Object3D) {
   // GLB models are nested hierarchies, so we dispose recursively.
-  obj.traverse((c) => {
-    if (c.geometry) c.geometry.dispose()
-    if (c.material) {
-      if (Array.isArray(c.material)) c.material.forEach((m) => m.dispose())
-      else c.material.dispose()
-    }
+  obj.traverse((child) => {
+    const c = child as DisposableObject
+    c.geometry?.dispose()
+    disposeMaterial(c.material)
   })
 }
 
@@ -545,7 +578,6 @@ function clearModel() {
   isolatedPartName.value = ''
   isolatedName.value = ''
   partDetailPanelOpen.value = false
-  isolatedMesh = null
   faultLabels.value = []
   hoveredFaultId.value = null
   clearHover()
@@ -558,7 +590,7 @@ function clearModel() {
 }
 
 // True if the mesh belongs to ANY currently-active faulty part/assembly.
-function meshIsFaulty(mesh) {
+function meshIsFaulty(mesh: THREE.Object3D) {
   const names = activeFaultNames.value
   for (const n of names) {
     if (meshMatchesPart(mesh, n)) return true
@@ -566,9 +598,9 @@ function meshIsFaulty(mesh) {
   return false
 }
 
-function applyPartStyle(mesh) {
-  const mat = mesh.material
-  if (!mat || !mat.isMeshStandardMaterial) return
+function applyPartStyle(mesh: THREE.Mesh) {
+  const mat = standardMaterialOf(mesh)
+  if (!mat) return
   const isFaulty = meshIsFaulty(mesh)
   if (isFaulty) {
     // Fault highlight color (red) is applied here.
@@ -591,11 +623,11 @@ function applyPartStyle(mesh) {
 function updateFaultyHighlight() {
   if (!modelGroup) return
   modelGroup.traverse((obj) => {
-    if (obj.isMesh && obj !== hoveredMesh) applyPartStyle(obj)
+    if (isMesh(obj) && obj !== hoveredMesh) applyPartStyle(obj)
   })
   if (hoveredMesh) {
-    const mat = hoveredMesh.material
-    if (mat && mat.isMeshStandardMaterial) {
+    const mat = standardMaterialOf(hoveredMesh)
+    if (mat) {
       mat.emissive.setHex(0x2563eb)
       mat.emissiveIntensity = 0.35
       mat.color.lerp(new THREE.Color(0xffffff), 0.15)
@@ -603,7 +635,7 @@ function updateFaultyHighlight() {
   }
 }
 
-function setHovered(mesh) {
+function setHovered(mesh: THREE.Mesh | null) {
   if (hoveredMesh === mesh) return
 
   if (hoveredMesh) applyPartStyle(hoveredMesh)
@@ -612,8 +644,8 @@ function setHovered(mesh) {
 
   if (!hoveredMesh) return
 
-  const mat = hoveredMesh.material
-  if (!mat || !mat.isMeshStandardMaterial) return
+  const mat = standardMaterialOf(hoveredMesh)
+  if (!mat) return
   mat.emissive.setHex(0x2563eb)
   mat.emissiveIntensity = 0.35
   mat.color.lerp(new THREE.Color(0xffffff), 0.15)
@@ -630,9 +662,9 @@ function onPointerLeave() {
   clearHover()
 }
 
-function onPointerMove(event) {
+function onPointerMove(event: PointerEvent) {
   const canvas = canvasEl.value
-  if (!canvas || !raycaster || !camera || !modelGroup) return
+  if (!canvas || !raycaster || !pointer || !camera || !modelGroup) return
   if (meshesCount.value === 0) return
 
   const rect = canvas.getBoundingClientRect()
@@ -640,9 +672,9 @@ function onPointerMove(event) {
   pointer.y = -(((event.clientY - rect.top) / rect.height) * 2 - 1)
   raycaster.setFromCamera(pointer, camera)
 
-  const meshes = []
+  const meshes: THREE.Mesh[] = []
   modelGroup.traverse((obj) => {
-    if (obj.isMesh && obj.visible) meshes.push(obj)
+    if (isMesh(obj) && obj.visible) meshes.push(obj)
   })
   const hits = raycaster.intersectObjects(meshes, false)
 
@@ -652,10 +684,10 @@ function onPointerMove(event) {
   }
 
   canvas.style.cursor = viewOnly.value ? 'default' : 'pointer'
-  const obj = hits[0].object
+  const obj = hits[0].object as THREE.Mesh
   setHovered(obj)
   // If the hovered mesh belongs to one of the faults, show that fault's card.
-  let matchedId = null
+  let matchedId: string | null = null
   for (const e of faultEntries.value) {
     if (meshMatchesPart(obj, e.partName)) {
       matchedId = e.id
@@ -665,9 +697,9 @@ function onPointerMove(event) {
   hoveredFaultId.value = matchedId
 }
 
-function onPointerDown(event) {
+function onPointerDown(event: PointerEvent) {
   const canvas = canvasEl.value
-  if (!canvas || !raycaster || !camera || !modelGroup) return
+  if (!canvas || !raycaster || !pointer || !camera || !modelGroup) return
   if (meshesCount.value === 0) return
   if (viewOnly.value) return
 
@@ -676,19 +708,19 @@ function onPointerDown(event) {
   pointer.y = -(((event.clientY - rect.top) / rect.height) * 2 - 1)
   raycaster.setFromCamera(pointer, camera)
 
-  const meshes = []
+  const meshes: THREE.Mesh[] = []
   modelGroup.traverse((obj) => {
-    if (obj.isMesh && obj.visible) meshes.push(obj)
+    if (isMesh(obj) && obj.visible) meshes.push(obj)
   })
   const hits = raycaster.intersectObjects(meshes, false)
   if (!hits.length) return
 
-  const clicked = hits[0].object
+  const clicked = hits[0].object as THREE.Mesh
   if (props.detailModelUrl && props.detailFaultyPart && meshIsFaulty(clicked)) {
     // Detail-view switch: when user clicks a faulty part, swap to the detail model.
     isDetailView.value = true
     loadModelFromUrl(props.detailModelUrl).then(() => {
-      detailFaultName.value = props.detailFaultyPart
+      detailFaultName.value = props.detailFaultyPart ?? ''
       updateFaultyHighlight()
     })
     return
@@ -705,20 +737,19 @@ function onPointerDown(event) {
 }
 
 // Return the fault part/assembly name that the given mesh belongs to, or '' if none.
-function faultNameForMesh(mesh) {
+function faultNameForMesh(mesh: THREE.Object3D): string {
   for (const e of faultEntries.value) {
     if (meshMatchesPart(mesh, e.partName)) return e.partName
   }
   return ''
 }
 
-function isolatePart(mesh) {
+function isolatePart(mesh: THREE.Mesh) {
   if (!modelGroup) return
   clearHover()
   modelGroup.traverse((obj) => {
-    if (obj.isMesh) obj.visible = (obj === mesh)
+    if (isMesh(obj)) obj.visible = (obj === mesh)
   })
-  isolatedMesh = mesh
   isolatedPartName.value = mesh?.userData?.partName || ''
   isolatedName.value = isolatedPartName.value
   partDetailPanelOpen.value = true
@@ -735,18 +766,17 @@ function isolatePart(mesh) {
  * Isolate a whole part/assembly by name: show only the meshes that belong to it (incl.
  * all sub-parts of an assembly), open the detail panel and frame the camera on it.
  */
-function isolateByName(name) {
+function isolateByName(name: string) {
   if (!modelGroup || !name) return
   clearHover()
-  const matches = []
+  const matches: THREE.Mesh[] = []
   modelGroup.traverse((obj) => {
-    if (!obj.isMesh) return
+    if (!isMesh(obj)) return
     const m = meshMatchesPart(obj, name)
     obj.visible = m
     if (m) matches.push(obj)
   })
   if (!matches.length) return
-  isolatedMesh = matches.length === 1 ? matches[0] : null
   isolatedPartName.value = name
   isolatedName.value = name
   partDetailPanelOpen.value = true
@@ -758,7 +788,7 @@ function isolateByName(name) {
   }
 }
 
-function focusFault(faultId) {
+function focusFault(faultId: string) {
   // Clicking a fault pin or a list row "drills into" that fault: isolate the whole
   // faulty unit (part or assembly) and open the detail panel.
   if (!modelGroup) return
@@ -769,7 +799,7 @@ function focusFault(faultId) {
   if (!isDetailView.value && props.detailModelUrl && props.detailFaultyPart) {
     isDetailView.value = true
     loadModelFromUrl(props.detailModelUrl).then(() => {
-      detailFaultName.value = props.detailFaultyPart
+      detailFaultName.value = props.detailFaultyPart ?? ''
       updateFaultyHighlight()
     })
     return
@@ -782,7 +812,6 @@ function showAllParts() {
     loadModelFromUrl(props.modelUrl)
     isDetailView.value = false
     detailFaultName.value = ''
-    isolatedMesh = null
     isolatedPartName.value = ''
     isolatedName.value = ''
     partDetailPanelOpen.value = false
@@ -792,9 +821,8 @@ function showAllParts() {
   }
   if (!modelGroup) return
   modelGroup.traverse((obj) => {
-    if (obj.isMesh) obj.visible = true
+    if (isMesh(obj)) obj.visible = true
   })
-  isolatedMesh = null
   isolatedPartName.value = ''
   isolatedName.value = ''
   partDetailPanelOpen.value = false
@@ -803,11 +831,11 @@ function showAllParts() {
   resetView()
 }
 
-function setWireframe(enabled) {
+function setWireframe(enabled: boolean) {
   wireframe.value = enabled
   if (!modelGroup) return
   modelGroup.traverse((obj) => {
-    if (obj.isMesh && obj.material) obj.material.wireframe = enabled
+    if (isMesh(obj)) setMaterialWireframe(obj.material, enabled)
   })
 }
 
@@ -815,7 +843,7 @@ function toggleWireframe() {
   setWireframe(!wireframe.value)
 }
 
-function focusToBox(bbox, distanceMultiplier = activeViewConfig.value.zoom.fullModel) {
+function focusToBox(bbox: THREE.Box3, distanceMultiplier = activeViewConfig.value.zoom.fullModel) {
   frameCameraOnBox(camera, controls, bbox, distanceMultiplier, modelGroup, activeViewConfig.value)
 }
 
@@ -834,8 +862,8 @@ function resetView() {
  * up from the mesh and return the nearest ancestor (incl. self) that carries a
  * `userData.name`, which is exactly the leaf node name (e.g. "Engine", "Front LG").
  */
-function pickPartName(mesh) {
-  let o = mesh
+function pickPartName(mesh: THREE.Object3D): string {
+  let o: THREE.Object3D | null = mesh
   while (o && o !== modelGroup) {
     const n = o.userData && o.userData.name ? String(o.userData.name).trim() : ''
     if (n) return n
@@ -850,9 +878,9 @@ function pickPartName(mesh) {
  * The result is [leafName, parentAssembly, grandparentAssembly, ...], letting us match
  * a fault against either a leaf part OR any ancestor assembly name.
  */
-function nodePath(obj, stop) {
-  const path = []
-  let o = obj
+function nodePath(obj: THREE.Object3D, stop: THREE.Object3D): string[] {
+  const path: string[] = []
+  let o: THREE.Object3D | null = obj
   while (o && o !== stop) {
     const n = o.userData && o.userData.name ? String(o.userData.name).trim() : ''
     if (n && !path.includes(n)) path.push(n)
@@ -866,7 +894,7 @@ function nodePath(obj, stop) {
  * ancestor assembly name stored in `userData.partPath`. This is what makes selecting a
  * whole assembly (e.g. "DC Converter Unit") highlight all of its sub-parts.
  */
-function meshMatchesPart(mesh, name) {
+function meshMatchesPart(mesh: THREE.Object3D | null, name: string): boolean {
   if (!name || !mesh) return false
   if (mesh.userData.partName === name) return true
   const path = mesh.userData.partPath
@@ -882,7 +910,7 @@ function meshMatchesPart(mesh, name) {
  * RAM'i patlatır (sekme çöker). Index korunur; sadece position/normal/index kopyalanır
  * (uv, color, tangent gibi gereksiz attribute'lar atılır).
  */
-function bakeGeometry(mesh) {
+function bakeGeometry(mesh: THREE.Mesh): THREE.BufferGeometry | null {
   const src = mesh.geometry
   if (!src) return null
   const pos = src.getAttribute('position')
@@ -903,7 +931,7 @@ function bakeGeometry(mesh) {
  * non-indexed) olmasını ister. Karışıksa (nadir) hepsini de-index ederiz; bu sadece
  * o parça için geçerli olduğundan genel bellek kazancı korunur.
  */
-function normalizePartGeoms(geoms) {
+function normalizePartGeoms(geoms: THREE.BufferGeometry[]): THREE.BufferGeometry[] {
   const anyIndexed = geoms.some((g) => g.index)
   const allIndexed = geoms.every((g) => g.index)
   if (anyIndexed && !allIndexed) {
@@ -925,17 +953,18 @@ function normalizePartGeoms(geoms) {
  * parts instead of individual triangle chunks. Materials are replaced with a fresh
  * MeshStandardMaterial so per-mesh highlight/hover/transparency is safe.
  */
-function renderGltf(gltf) {
+function renderGltf(gltf: GLTF) {
   const root = gltf.scene || (Array.isArray(gltf.scenes) ? gltf.scenes[0] : null)
   if (!root) throw new Error('glTF does not contain a scene.')
+  if (!modelGroup) return
 
   root.updateMatrixWorld(true)
 
-  const partGeoms = new Map()
-  const partPaths = new Map()
-  const order = []
+  const partGeoms = new Map<string, THREE.BufferGeometry[]>()
+  const partPaths = new Map<string, string[]>()
+  const order: string[] = []
   root.traverse((obj) => {
-    if (!obj.isMesh) return
+    if (!isMesh(obj)) return
     const partName = pickPartName(obj)
     const geom = bakeGeometry(obj)
     if (!geom) return
@@ -944,11 +973,11 @@ function renderGltf(gltf) {
       partPaths.set(partName, nodePath(obj, root))
       order.push(partName)
     }
-    partGeoms.get(partName).push(geom)
+    partGeoms.get(partName)!.push(geom)
   })
 
   for (const partName of order) {
-    let geoms = partGeoms.get(partName)
+    let geoms = partGeoms.get(partName)!
     if (geoms.length > 1) geoms = normalizePartGeoms(geoms)
     const merged = geoms.length === 1 ? geoms[0] : mergeGeometries(geoms, false)
     if (!merged) continue
@@ -970,12 +999,9 @@ function renderGltf(gltf) {
 
   // Free the original (now-unused) glTF scene resources.
   root.traverse((obj) => {
-    if (obj.isMesh) {
+    if (isMesh(obj)) {
       obj.geometry?.dispose()
-      if (obj.material) {
-        if (Array.isArray(obj.material)) obj.material.forEach((m) => m.dispose())
-        else obj.material.dispose()
-      }
+      disposeMaterial(obj.material)
     }
   })
 
@@ -989,7 +1015,7 @@ function renderGltf(gltf) {
   if (!fitBox.isEmpty()) focusToBox(fitBox, activeViewConfig.value.zoom.fullModel)
 }
 
-async function loadModelFromUrl(url) {
+async function loadModelFromUrl(url: string) {
   if (!url) return
   errorText.value = ''
   statusText.value = 'Loading model...'
@@ -1001,7 +1027,7 @@ async function loadModelFromUrl(url) {
     statusText.value = `Loaded. Mesh count: ${meshesCount.value}`
   } catch (e) {
     console.error(e)
-    errorText.value = e?.message || String(e)
+    errorText.value = (e instanceof Error && e.message) || String(e)
     statusText.value = ''
   }
 }

@@ -133,34 +133,58 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import type { PropType } from 'vue'
 import Button from 'primevue/button'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { ViewportGizmo } from 'three-viewport-gizmo'
 import { createViewportGizmo } from '../three/viewportGizmoConfig'
+import type { GizmoInstance } from '../three/viewportGizmoConfig'
 import '../three/viewportGizmo.css'
 import { applyModelOrientation, frameCameraOnBox, mergeViewConfig } from '../three/defaultView'
 import { observeStageBackground, readStageColor } from '../three/sceneBackground'
+import { disposeMaterial, isMesh, setMaterialWireframe, standardMaterialOf } from '../three/meshUtils'
+import type { DisposableObject } from '../three/meshUtils'
+import type { ViewConfigPartial } from '@/types/view-types'
+
+/** Nested glTF node, as shown in the model tree panel. */
+interface TreeNode {
+  id: string
+  name: string
+  partName: string
+  children: TreeNode[]
+}
+
+/** One rendered row of the flattened model tree. */
+interface TreeRow {
+  id: string
+  name: string
+  partName: string
+  depth: number
+  hasChildren: boolean
+  isExpanded: boolean
+}
 
 const props = defineProps({
   /**
    * Kamera / ViewCube yönü — HmsViewer ile aynı yapı.
    * modelRegistry viewConfig veya aircraft.viewConfig buraya verilir.
    */
-  viewConfig: { type: Object, default: null }
+  viewConfig: { type: Object as PropType<ViewConfigPartial | null>, default: null }
 })
 
 const activeViewConfig = computed(() => mergeViewConfig(props.viewConfig))
 
 // 3D sahne arka planı --stage-bg CSS değişkeninden okunur (ana projenin temasına uyar).
-let disposeStageBg = null
+let disposeStageBg: (() => void) | null = null
 
-const canvasEl = ref(null)
-const fileInputEl = ref(null)
+const canvasEl = ref<HTMLCanvasElement | null>(null)
+const fileInputEl = ref<HTMLInputElement | null>(null)
 const statusText = ref('Select a GLB / glTF file to load.')
 const errorText = ref('')
 const fileName = ref('')
@@ -171,23 +195,23 @@ const meshesCount = ref(0)
 const isIsolated = ref(false)
 const isolatedPartName = ref('')
 const partDetailPanelOpen = ref(false)
-const partNames = ref([])
+const partNames = ref<string[]>([])
 const faultyPartName = ref('')
-const stageRef = ref(null)
+const stageRef = ref<HTMLElement | null>(null)
 const faultLabelScreen = ref({ x: 0, y: 0, visible: false })
 const transparentOthers = ref(false)
 
 // Model tree (glTF node hierarchy) shown as a collapsible panel.
-const modelTree = ref([])
-const expandedNodes = ref(new Set())
+const modelTree = ref<TreeNode[]>([])
+const expandedNodes = ref<Set<string>>(new Set())
 const treeOpen = ref(false)
 
 /** Flatten the tree into rows for rendering, honoring each node's expanded state. */
-const flatTree = computed(() => {
-  const out = []
-  const walk = (nodes, depth) => {
+const flatTree = computed<TreeRow[]>(() => {
+  const out: TreeRow[] = []
+  const walk = (nodes: TreeNode[], depth: number) => {
     for (const n of nodes) {
-      const hasChildren = n.children && n.children.length > 0
+      const hasChildren = n.children.length > 0
       const isExpanded = expandedNodes.value.has(n.id)
       out.push({ id: n.id, name: n.name, partName: n.partName, depth, hasChildren, isExpanded })
       if (hasChildren && isExpanded) walk(n.children, depth + 1)
@@ -199,8 +223,8 @@ const flatTree = computed(() => {
 
 /** All node names (assemblies + leaves) for the "Faulty part" dropdown. */
 const allNodeNames = computed(() => {
-  const set = new Set()
-  const walk = (nodes) => {
+  const set = new Set<string>()
+  const walk = (nodes: TreeNode[]) => {
     for (const n of nodes) {
       if (n.name) set.add(n.name)
       if (n.children) walk(n.children)
@@ -221,22 +245,22 @@ watch([isIsolated, partDetailPanelOpen], () => {
   setTimeout(onResize, 80)
 })
 
-let scene = null
-let camera = null
-let renderer = null
-let controls = null
-let modelGroup = null
-let rafId = null
-let raycaster = null
-let pointer = null
-let hoveredMesh = null
-let isolatedMesh = null
-let viewportGizmo = null
+let scene: THREE.Scene | null = null
+let camera: THREE.PerspectiveCamera | null = null
+let renderer: THREE.WebGLRenderer | null = null
+let controls: OrbitControls | null = null
+let modelGroup: THREE.Group | null = null
+let rafId: number | null = null
+let raycaster: THREE.Raycaster | null = null
+let pointer: THREE.Vector2 | null = null
+let hoveredMesh: THREE.Mesh | null = null
+let isolatedMesh: THREE.Mesh | null = null
+let viewportGizmo: GizmoInstance | null = null
 const gltfLoader = new GLTFLoader()
 
 /** px² — drag above this is treated as orbit, not part pick */
 const CLICK_DRAG_THRESHOLD_SQ = 25
-let pointerDownClient = null
+let pointerDownClient: { x: number; y: number } | null = null
 
 function initViewportGizmo() {
   const container = stageRef.value || canvasEl.value?.parentElement
@@ -319,15 +343,14 @@ function loop() {
     } else {
       const bbox = new THREE.Box3()
       modelGroup.traverse((obj) => {
-        if (obj.isMesh && meshMatchesPart(obj, faultyPartName.value)) bbox.union(new THREE.Box3().setFromObject(obj))
+        if (isMesh(obj) && meshMatchesPart(obj, faultyPartName.value)) bbox.union(new THREE.Box3().setFromObject(obj))
       })
       if (!bbox.isEmpty()) {
         bbox.getCenter(worldPos)
         ndc.copy(worldPos).project(camera)
         const canvas = canvasEl.value
         const rect = canvas.getBoundingClientRect()
-        const stage = canvas.parentElement
-        const stageRect = stage.getBoundingClientRect()
+        const stageRect = (canvas.parentElement ?? canvas).getBoundingClientRect()
         const px = rect.left + (ndc.x + 1) * 0.5 * rect.width
         const py = rect.top + (1 - ndc.y) * 0.5 * rect.height
         faultLabelScreen.value = {
@@ -348,14 +371,14 @@ function loop() {
     controls.enabled = true
   }
 
-  renderer?.render(scene, camera)
+  if (renderer && scene && camera) renderer.render(scene, camera)
   viewportGizmo?.render()
 }
 
 function onResize() {
   const canvas = canvasEl.value
-  if (!canvas || !camera || !renderer) return
-  const parent = canvas.parentElement
+  const parent = canvas?.parentElement
+  if (!canvas || !camera || !renderer || !parent) return
   const width = parent.clientWidth
   const height = parent.clientHeight
   renderer.setSize(width, height, false)
@@ -364,13 +387,11 @@ function onResize() {
   viewportGizmo?.update()
 }
 
-function disposeObject(obj) {
-  obj.traverse((c) => {
-    if (c.geometry) c.geometry.dispose()
-    if (c.material) {
-      if (Array.isArray(c.material)) c.material.forEach((m) => m.dispose())
-      else c.material.dispose()
-    }
+function disposeObject(obj: THREE.Object3D) {
+  obj.traverse((child) => {
+    const c = child as DisposableObject
+    c.geometry?.dispose()
+    disposeMaterial(c.material)
   })
 }
 
@@ -393,9 +414,9 @@ function clearModel() {
   }
 }
 
-function applyPartStyle(mesh) {
-  const mat = mesh.material
-  if (!mat || !mat.isMeshStandardMaterial) return
+function applyPartStyle(mesh: THREE.Mesh) {
+  const mat = standardMaterialOf(mesh)
+  if (!mat) return
   const isFaulty = meshMatchesPart(mesh, faultyPartName.value)
   if (isFaulty) {
     mat.color.setHex(0xdc2626)
@@ -417,11 +438,11 @@ function applyPartStyle(mesh) {
 function updateFaultyHighlight() {
   if (!modelGroup) return
   modelGroup.traverse((obj) => {
-    if (obj.isMesh && obj !== hoveredMesh) applyPartStyle(obj)
+    if (isMesh(obj) && obj !== hoveredMesh) applyPartStyle(obj)
   })
   if (hoveredMesh) {
-    const mat = hoveredMesh.material
-    if (mat && mat.isMeshStandardMaterial) {
+    const mat = standardMaterialOf(hoveredMesh)
+    if (mat) {
       mat.emissive.setHex(0x2563eb)
       mat.emissiveIntensity = 0.35
       mat.color.lerp(new THREE.Color(0xffffff), 0.15)
@@ -429,7 +450,7 @@ function updateFaultyHighlight() {
   }
 }
 
-function setHovered(mesh) {
+function setHovered(mesh: THREE.Mesh | null) {
   if (hoveredMesh === mesh) return
 
   if (hoveredMesh) applyPartStyle(hoveredMesh)
@@ -438,8 +459,8 @@ function setHovered(mesh) {
 
   if (!hoveredMesh) return
 
-  const mat = hoveredMesh.material
-  if (!mat || !mat.isMeshStandardMaterial) return
+  const mat = standardMaterialOf(hoveredMesh)
+  if (!mat) return
   mat.emissive.setHex(0x2563eb)
   mat.emissiveIntensity = 0.35
   mat.color.lerp(new THREE.Color(0xffffff), 0.15)
@@ -460,9 +481,9 @@ function onPointerCancel() {
   pointerDownClient = null
 }
 
-function onPointerMove(event) {
+function onPointerMove(event: PointerEvent) {
   const canvas = canvasEl.value
-  if (!canvas || !raycaster || !camera || !modelGroup) return
+  if (!canvas || !raycaster || !pointer || !camera || !modelGroup) return
   if (meshesCount.value === 0) return
 
   const rect = canvas.getBoundingClientRect()
@@ -470,9 +491,9 @@ function onPointerMove(event) {
   pointer.y = -(((event.clientY - rect.top) / rect.height) * 2 - 1)
   raycaster.setFromCamera(pointer, camera)
 
-  const meshes = []
+  const meshes: THREE.Mesh[] = []
   modelGroup.traverse((obj) => {
-    if (obj.isMesh && obj.visible) meshes.push(obj)
+    if (isMesh(obj) && obj.visible) meshes.push(obj)
   })
   const hits = raycaster.intersectObjects(meshes, false)
 
@@ -482,32 +503,32 @@ function onPointerMove(event) {
   }
 
   canvas.style.cursor = 'pointer'
-  setHovered(hits[0].object)
+  setHovered(hits[0].object as THREE.Mesh)
 }
 
-function onPointerDown(event) {
+function onPointerDown(event: PointerEvent) {
   if (event.button !== 0) return
   pointerDownClient = { x: event.clientX, y: event.clientY }
 }
 
-function pickMeshAtClient(clientX, clientY) {
+function pickMeshAtClient(clientX: number, clientY: number): THREE.Mesh | null {
   const canvas = canvasEl.value
-  if (!canvas || !raycaster || !camera || !modelGroup || meshesCount.value === 0) return null
+  if (!canvas || !raycaster || !pointer || !camera || !modelGroup || meshesCount.value === 0) return null
 
   const rect = canvas.getBoundingClientRect()
   pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1
   pointer.y = -(((clientY - rect.top) / rect.height) * 2 - 1)
   raycaster.setFromCamera(pointer, camera)
 
-  const meshes = []
+  const meshes: THREE.Mesh[] = []
   modelGroup.traverse((obj) => {
-    if (obj.isMesh && obj.visible) meshes.push(obj)
+    if (isMesh(obj) && obj.visible) meshes.push(obj)
   })
   const hits = raycaster.intersectObjects(meshes, false)
-  return hits.length ? hits[0].object : null
+  return hits.length ? (hits[0].object as THREE.Mesh) : null
 }
 
-function onPointerUp(event) {
+function onPointerUp(event: PointerEvent) {
   if (event.button !== 0 || !pointerDownClient) return
 
   const dx = event.clientX - pointerDownClient.x
@@ -527,11 +548,11 @@ function onPointerUp(event) {
   isolatePart(clicked)
 }
 
-function isolatePart(mesh) {
+function isolatePart(mesh: THREE.Mesh) {
   if (!modelGroup) return
   clearHover()
   modelGroup.traverse((obj) => {
-    if (obj.isMesh) obj.visible = (obj === mesh)
+    if (isMesh(obj)) obj.visible = (obj === mesh)
   })
   isolatedMesh = mesh
   isolatedPartName.value = mesh?.userData?.partName || ''
@@ -544,7 +565,7 @@ function isolatePart(mesh) {
 function showAllParts() {
   if (!modelGroup) return
   modelGroup.traverse((obj) => {
-    if (obj.isMesh) obj.visible = true
+    if (isMesh(obj)) obj.visible = true
   })
   isolatedMesh = null
   isolatedPartName.value = ''
@@ -554,11 +575,11 @@ function showAllParts() {
   resetView()
 }
 
-function setWireframe(enabled) {
+function setWireframe(enabled: boolean) {
   wireframe.value = enabled
   if (!modelGroup) return
   modelGroup.traverse((obj) => {
-    if (obj.isMesh && obj.material) obj.material.wireframe = enabled
+    if (isMesh(obj)) setMaterialWireframe(obj.material, enabled)
   })
 }
 
@@ -566,7 +587,7 @@ function toggleWireframe() {
   setWireframe(!wireframe.value)
 }
 
-function focusToBox(bbox, distanceMultiplier = activeViewConfig.value.zoom.fullModel) {
+function focusToBox(bbox: THREE.Box3, distanceMultiplier = activeViewConfig.value.zoom.fullModel) {
   frameCameraOnBox(camera, controls, bbox, distanceMultiplier, modelGroup, activeViewConfig.value)
 }
 
@@ -583,28 +604,28 @@ let treeIdCounter = 0
  * are skipped and their children are bubbled up, so the tree only shows meaningful
  * assembly / part names.
  */
-function buildTree(root) {
+function buildTree(root: THREE.Object3D): TreeNode[] {
   treeIdCounter = 0
-  const walk = (obj) => {
+  const walk = (obj: THREE.Object3D): TreeNode[] => {
     const name = obj.userData && obj.userData.name ? String(obj.userData.name).trim() : ''
-    const childNodes = []
+    const childNodes: TreeNode[] = []
     for (const child of obj.children || []) childNodes.push(...walk(child))
     if (name) return [{ id: 't' + treeIdCounter++, name, partName: name, children: childNodes }]
     return childNodes
   }
-  const out = []
+  const out: TreeNode[] = []
   for (const child of root.children || []) out.push(...walk(child))
   return out
 }
 
-function toggleNode(id) {
+function toggleNode(id: string) {
   const s = new Set(expandedNodes.value)
   if (s.has(id)) s.delete(id)
   else s.add(id)
   expandedNodes.value = s
 }
 
-function collectExpandableIds(nodes, acc) {
+function collectExpandableIds(nodes: TreeNode[], acc: string[]): string[] {
   for (const n of nodes) {
     if (n.children && n.children.length) {
       acc.push(n.id)
@@ -627,16 +648,16 @@ function collapseAllNodes() {
  * Clicking the already-selected node clears the selection. The camera frames the node
  * but other parts stay visible/clickable so the user can still drill into a sub-part.
  */
-function selectTreeNode(row) {
+function selectTreeNode(row: TreeRow) {
   if (faultyPartName.value === row.partName) {
     faultyPartName.value = ''
     return
   }
   faultyPartName.value = row.partName
   if (!modelGroup) return
-  const matches = []
+  const matches: THREE.Mesh[] = []
   modelGroup.traverse((o) => {
-    if (o.isMesh && meshMatchesPart(o, row.partName)) matches.push(o)
+    if (isMesh(o) && meshMatchesPart(o, row.partName)) matches.push(o)
   })
   if (matches.length) {
     const bbox = new THREE.Box3()
@@ -650,8 +671,8 @@ function selectTreeNode(row) {
  * original glTF node name in `userData.name`; for multi-primitive meshes only the node
  * (Group) carries it, so we return the nearest ancestor (incl. self) that has one.
  */
-function pickPartName(mesh) {
-  let o = mesh
+function pickPartName(mesh: THREE.Object3D): string {
+  let o: THREE.Object3D | null = mesh
   while (o && o !== modelGroup) {
     const n = o.userData && o.userData.name ? String(o.userData.name).trim() : ''
     if (n) return n
@@ -665,9 +686,9 @@ function pickPartName(mesh) {
  * Collect the full chain of glTF node names from `obj` up to (but excluding) `stop`:
  * [leafName, parentAssembly, grandparentAssembly, ...].
  */
-function nodePath(obj, stop) {
-  const path = []
-  let o = obj
+function nodePath(obj: THREE.Object3D, stop: THREE.Object3D): string[] {
+  const path: string[] = []
+  let o: THREE.Object3D | null = obj
   while (o && o !== stop) {
     const n = o.userData && o.userData.name ? String(o.userData.name).trim() : ''
     if (n && !path.includes(n)) path.push(n)
@@ -680,7 +701,7 @@ function nodePath(obj, stop) {
  * True if `mesh` belongs to part/assembly `name`: matches its own leaf name OR any
  * ancestor assembly name in `userData.partPath`. Lets a whole assembly highlight red.
  */
-function meshMatchesPart(mesh, name) {
+function meshMatchesPart(mesh: THREE.Object3D | null, name: string): boolean {
   if (!name || !mesh) return false
   if (mesh.userData.partName === name) return true
   const path = mesh.userData.partPath
@@ -691,7 +712,7 @@ function meshMatchesPart(mesh, name) {
  * Bake a mesh's world transform into a fresh position+normal-only geometry, so all
  * geometries of one part can be merged (mergeGeometries needs matching attributes).
  */
-function bakeGeometry(mesh) {
+function bakeGeometry(mesh: THREE.Mesh): THREE.BufferGeometry | null {
   const src = mesh.geometry
   if (!src) return null
   const g = src.index ? src.toNonIndexed() : src.clone()
@@ -708,9 +729,10 @@ function bakeGeometry(mesh) {
  * Render a loaded glTF/GLB into the scene, merging all primitives that belong to the
  * same node into ONE mesh per part (so isolation / highlight work on whole parts).
  */
-function renderGltf(gltf) {
+function renderGltf(gltf: GLTF) {
   const root = gltf.scene || (Array.isArray(gltf.scenes) ? gltf.scenes[0] : null)
   if (!root) throw new Error('glTF does not contain a scene.')
+  if (!modelGroup) return
 
   root.updateMatrixWorld(true)
 
@@ -721,11 +743,11 @@ function renderGltf(gltf) {
     modelTree.value.filter((n) => n.children && n.children.length).map((n) => n.id)
   )
 
-  const partGeoms = new Map()
-  const partPaths = new Map()
-  const order = []
+  const partGeoms = new Map<string, THREE.BufferGeometry[]>()
+  const partPaths = new Map<string, string[]>()
+  const order: string[] = []
   root.traverse((obj) => {
-    if (!obj.isMesh) return
+    if (!isMesh(obj)) return
     const partName = pickPartName(obj)
     const geom = bakeGeometry(obj)
     if (!geom) return
@@ -734,11 +756,11 @@ function renderGltf(gltf) {
       partPaths.set(partName, nodePath(obj, root))
       order.push(partName)
     }
-    partGeoms.get(partName).push(geom)
+    partGeoms.get(partName)!.push(geom)
   })
 
   for (const partName of order) {
-    const geoms = partGeoms.get(partName)
+    const geoms = partGeoms.get(partName)!
     const merged = geoms.length === 1 ? geoms[0] : mergeGeometries(geoms, false)
     if (!merged) continue
     geoms.forEach((g) => { if (g !== merged) g.dispose() })
@@ -758,12 +780,9 @@ function renderGltf(gltf) {
   }
 
   root.traverse((obj) => {
-    if (obj.isMesh) {
+    if (isMesh(obj)) {
       obj.geometry?.dispose()
-      if (obj.material) {
-        if (Array.isArray(obj.material)) obj.material.forEach((m) => m.dispose())
-        else obj.material.dispose()
-      }
+      disposeMaterial(obj.material)
     }
   })
 
@@ -776,8 +795,9 @@ function renderGltf(gltf) {
   if (!fitBox.isEmpty()) focusToBox(fitBox, activeViewConfig.value.zoom.fullModel)
 }
 
-async function onFileChange(event) {
-  const file = event.target.files?.[0]
+async function onFileChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
   if (!file) return
 
   fileName.value = file.name
@@ -798,10 +818,10 @@ async function onFileChange(event) {
     statusText.value = `Loaded. Mesh count: ${meshesCount.value}`
   } catch (e) {
     console.error(e)
-    errorText.value = e?.message || String(e)
+    errorText.value = (e instanceof Error && e.message) || String(e)
     statusText.value = ''
   } finally {
-    event.target.value = ''
+    input.value = ''
   }
 }
 
