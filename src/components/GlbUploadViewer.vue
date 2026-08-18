@@ -409,6 +409,7 @@ function clearModel() {
   if (!modelGroup) return
   while (modelGroup.children.length) {
     const obj = modelGroup.children[0]
+    if (!obj) break
     modelGroup.remove(obj)
     disposeObject(obj)
   }
@@ -495,15 +496,15 @@ function onPointerMove(event: PointerEvent) {
   modelGroup.traverse((obj) => {
     if (isMesh(obj) && obj.visible) meshes.push(obj)
   })
-  const hits = raycaster.intersectObjects(meshes, false)
+  const hit = raycaster.intersectObjects(meshes, false)[0]
 
-  if (!hits.length) {
+  if (!hit) {
     clearHover()
     return
   }
 
   canvas.style.cursor = 'pointer'
-  setHovered(hits[0].object as THREE.Mesh)
+  setHovered(hit.object as THREE.Mesh)
 }
 
 function onPointerDown(event: PointerEvent) {
@@ -524,8 +525,8 @@ function pickMeshAtClient(clientX: number, clientY: number): THREE.Mesh | null {
   modelGroup.traverse((obj) => {
     if (isMesh(obj) && obj.visible) meshes.push(obj)
   })
-  const hits = raycaster.intersectObjects(meshes, false)
-  return hits.length ? (hits[0].object as THREE.Mesh) : null
+  const hit = raycaster.intersectObjects(meshes, false)[0]
+  return hit ? (hit.object as THREE.Mesh) : null
 }
 
 function onPointerUp(event: PointerEvent) {

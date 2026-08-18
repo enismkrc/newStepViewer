@@ -36,31 +36,76 @@ export interface LruRecord {
   LRU_Serial_No: string
 }
 
+/**
+ * `getFilteredMflData` yanıtındaki ham MFL satırı.
+ *
+ * Backend bazı alanları PascalCase (`FlightNo`, `FleetName`) ve LRU alanlarını "Iru"
+ * yazımıyla gönderiyor; normalizasyonun bozulmaması için her iki yazım da opsiyonel
+ * olarak tanımlıdır.
+ */
 export interface MflRecord {
+  mflMetaId?: string
+  lruFieldsMflId?: string
+  /** 3D modeldeki parçayı bulmak için kullanılan FIN numarası. */
   finNumber?: string
   absoluteTime?: string
-  relativeTime?: string
+  relativeTime?: number | string
   faultCode?: string
   severity?: string
   category?: string
   description?: string
+  location?: string
+  flightId?: string
+  FlightNo?: string
+  flightNo?: string
+  missionType?: string
+  aircraftId?: string
+  aircraftName?: string
+  FleetId?: string
+  fleetId?: string
+  FleetName?: string
+  fleetName?: string
+  fleetBase?: string
+  IruModelId?: string
+  lruModelId?: string
+  IruModelName?: string
+  lruModelName?: string
+  IruFieldId?: string
+  lruFieldId?: string
+  IruFieldName?: string
+  lruFieldName?: string
+  ataChapterId?: string
+  ataChapterCode?: string
 }
 
+/** Viewer'ın kullandığı sadeleştirilmiş MFL kaydı. Eksik alanlar boş string olur. */
 export interface NormalizedMflRecord {
-  part?: string
-  finNumber?: string
-  MFL_Id: string
-  MFL_Field_Name: string
-  MFL_Description: string
-  MFL_Absulut_time: string
-  MFL_Relative_Time: string
-  Fault_Code: string
-  Severity: string
-  Description: string
-  Category: string
+  /** Liste anahtarı (mflMetaId varsa o, yoksa türetilmiş). */
+  id: string
+  /** Ham `finNumber`. */
+  fin: string
+  /** Parça eşleştirmesi için normalize edilmiş FIN. */
+  finKey: string
+  faultCode: string
+  severity: string
+  category: string
+  description: string
+  location: string
+  absoluteTime: string
+  relativeTime: string
+  ataChapterCode: string
+  lruModelName: string
+  lruFieldName: string
+  flightNo: string
+  missionType: string
+  aircraftName: string
+  fleetName: string
+  fleetBase: string
+  mflMetaId: string
 }
 
 export interface Fault {
+  /** Eşleştirme için kullanılan ham FIN değeri. */
   part: string
   type: string
   fin: string

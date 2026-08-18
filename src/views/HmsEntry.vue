@@ -206,7 +206,8 @@ async function onAircraftChange(e: SelectChangeEvent) {
   loadingFlights.value = true
   try {
     flights.value = await findFlightsByAircraftId(selectedAircraftId.value)
-    if (flights.value.length === 1) selectedFlightId.value = flights.value[0].id
+    const onlyFlight = flights.value.length === 1 ? flights.value[0] : null
+    if (onlyFlight) selectedFlightId.value = onlyFlight.id
   } catch (err) {
     console.error('Failed to load flights:', err)
     loadError.value = 'Uçuş listesi yüklenemedi.'

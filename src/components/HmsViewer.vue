@@ -78,9 +78,16 @@
         >
           <div class="fault-label-line"></div>
           <div class="fault-label-box">
-            <div class="fault-card-row fault-card-fin">FIN# {{ activeFaultLabel.card.fin }}</div>
-            <div class="fault-card-row"><span class="fault-card-label">Part:</span> {{ activeFaultLabel.card.lruName }}</div>
-            <div class="fault-card-row"><span class="fault-card-label">MFL Id:</span> {{ activeFaultLabel.card.mflId }}</div>
+            <div v-if="activeFaultLabel.card.hasFin" class="fault-card-row fault-card-fin">
+              FIN# {{ activeFaultLabel.card.fin }}
+            </div>
+            <div v-if="activeFaultLabel.card.lruName" class="fault-card-row">
+              <span class="fault-card-label">Part:</span> {{ activeFaultLabel.card.lruName }}
+            </div>
+            <div class="fault-card-row">
+              <span class="fault-card-label">Fault Code:</span> {{ activeFaultLabel.card.faultCode }}
+              <span class="detail-status" :class="statusClass(activeFaultLabel.card.severity)">{{ activeFaultLabel.card.severity }}</span>
+            </div>
             <div class="fault-card-row fault-card-desc"><span class="fault-card-label">Description:</span> {{ activeFaultLabel.card.description }}</div>
           </div>
         </div>
@@ -97,8 +104,12 @@
               @click="focusFault(f.id)"
             >
               <span class="fault-list-num">{{ i + 1 }}</span>
-              <span class="fault-list-name">{{ f.card.lruName }}</span>
-              <span class="fault-list-mfl">{{ f.card.mflId }}</span>
+              <span class="fault-list-text">
+                <span v-if="f.card.hasFin" class="fault-list-fin">{{ f.card.fin }}</span>
+                <span v-if="f.card.lruName" class="fault-list-name">{{ f.card.lruName }}</span>
+              </span>
+              <span v-if="f.card.count > 1" class="fault-list-count">{{ f.card.count }}</span>
+              <span class="fault-list-mfl">{{ f.card.faultCode }}</span>
             </li>
           </ul>
         </div>
@@ -115,51 +126,74 @@
             @click="partDetailPanelOpen = false"
           />
         </div>
-        <div class="part-detail-heading">{{ isolatedName }}</div>
+        <div class="part-detail-heading">
+          <span v-if="activePart?.hasFin" class="part-fin-badge">FIN {{ activePart.fin }}</span>
+          <span class="part-detail-name">{{ activePart?.label || isolatedName }}</span>
+        </div>
 
-        <dl v-if="activeFaultSummary" class="part-detail-list">
-          <dt>FIN</dt>
-          <dd>{{ activeFaultSummary.fin }}</dd>
+        <dl v-if="activeFaultSummary && activeFaultSummary.count" class="part-detail-list">
+          <dt v-if="activeFaultSummary.hasFin">FIN Number</dt>
+          <dd v-if="activeFaultSummary.hasFin">{{ activeFaultSummary.fin }}</dd>
           <dt>Part</dt>
-          <dd>{{ activeFaultSummary.lruName }}</dd>
+          <dd>{{ dash(activeFaultSummary.lruName || activePart?.label) }}</dd>
           <dt>Fault Code</dt>
-          <dd>{{ activeFaultSummary.mflId }}</dd>
+          <dd>{{ activeFaultSummary.faultCode }}</dd>
+          <dt>Severity</dt>
+          <dd><span class="detail-status" :class="statusClass(activeFaultSummary.severity)">{{ activeFaultSummary.severity }}</span></dd>
           <dt>Description</dt>
           <dd>{{ activeFaultSummary.description }}</dd>
         </dl>
+        <p v-else class="part-detail-empty">No MFL record for this part.</p>
 
         <div v-if="activeLru" class="detail-section">
           <h4 class="detail-section-title">LRU</h4>
           <dl class="part-detail-list">
-            <dt>LRU Instance Name</dt>
-            <dd>{{ activeLru.LRU_Instance_Name }}</dd>
-            <dt>LRU Serial No.</dt>
-            <dd>{{ activeLru.LRU_Serial_No }}</dd>
+            <dt>LRU Model</dt>
+            <dd>{{ dash(activeLru.modelName) }}</dd>
+            <dt>LRU Field</dt>
+            <dd>{{ dash(activeLru.fieldName) }}</dd>
+            <dt v-if="activeLru.serialNo">LRU Serial No.</dt>
+            <dd v-if="activeLru.serialNo">{{ activeLru.serialNo }}</dd>
+          </dl>
+        </div>
+
+        <div v-if="activeContext" class="detail-section">
+          <h4 class="detail-section-title">Flight</h4>
+          <dl class="part-detail-list">
+            <dt>Flight No</dt>
+            <dd>{{ dash(activeContext.flightNo) }}</dd>
+            <dt>Mission Type</dt>
+            <dd>{{ dash(activeContext.missionType) }}</dd>
+            <dt>Aircraft</dt>
+            <dd>{{ dash(activeContext.aircraftName) }}</dd>
+            <dt>Fleet</dt>
+            <dd>{{ dash(activeContext.fleetName) }}</dd>
+            <dt>Fleet Base</dt>
+            <dd>{{ dash(activeContext.fleetBase) }}</dd>
           </dl>
         </div>
 
         <div v-if="activeMflList.length" class="detail-section">
           <h4 class="detail-section-title">MFL ({{ activeMflList.length }})</h4>
-          <div v-for="m in activeMflList" :key="m.MFL_Id" class="mfl-block">
+          <div v-for="m in activeMflList" :key="m.id" class="mfl-block">
+            <div class="mfl-block-head">
+              <span class="mfl-code">{{ dash(m.faultCode) }}</span>
+              <span class="detail-status" :class="statusClass(m.severity)">{{ dash(m.severity) }}</span>
+            </div>
+            <p class="mfl-description">{{ dash(m.description) }}</p>
             <dl class="part-detail-list">
-              <dt>MFL Id</dt>
-              <dd>{{ m.MFL_Id }}</dd>
-              <dt>Field Name</dt>
-              <dd>{{ m.MFL_Field_Name }}</dd>
-              <dt>Description</dt>
-              <dd>{{ m.MFL_Description }}</dd>
-              <dt>Absolute Time</dt>
-              <dd>{{ m.MFL_Absulut_time }}</dd>
-              <dt>Relative Time</dt>
-              <dd>{{ m.MFL_Relative_Time }}</dd>
               <dt>Category</dt>
-              <dd>{{ m.Category || '—' }}</dd>
-              <dt>Fault Code</dt>
-              <dd>{{ m.Fault_Code }}</dd>
-              <dt>Severity</dt>
-              <dd><span class="detail-status" :class="statusClass(m.Severity)">{{ m.Severity }}</span></dd>
-              <dt>Detail</dt>
-              <dd>{{ m.Description }}</dd>
+              <dd>{{ dash(m.category) }}</dd>
+              <dt>Location</dt>
+              <dd>{{ dash(m.location) }}</dd>
+              <dt>ATA Chapter</dt>
+              <dd>{{ dash(m.ataChapterCode) }}</dd>
+              <dt>Absolute Time</dt>
+              <dd>{{ formatDateTime(m.absoluteTime) }}</dd>
+              <dt>Relative Time</dt>
+              <dd>{{ dash(m.relativeTime) }}</dd>
+              <dt v-if="m.mflMetaId">MFL Meta Id</dt>
+              <dd v-if="m.mflMetaId">{{ m.mflMetaId }}</dd>
             </dl>
           </div>
         </div>
@@ -185,30 +219,44 @@ import { mergeViewConfig, applyModelOrientation, frameCameraOnBox } from '../thr
 import { observeStageBackground, readStageColor } from '../three/sceneBackground'
 import { disposeMaterial, isMesh, setMaterialWireframe, standardMaterialOf } from '../three/meshUtils'
 import type { DisposableObject } from '../three/meshUtils'
+import { normalizeFin, parseFinValue, parsePartName } from '../three/partNaming'
 import type { Fault, LruRecord, NormalizedMflRecord } from '@/types/api-types'
 import type { ViewConfigPartial } from '@/types/view-types'
 
 /** Normalized fault definition, from either the `faults` array or `faultyPart`. */
 interface FaultDef {
-  part: string
+  /** Raw match key: MFL `finNumber` (or a plain part name for the legacy props). */
+  key: string
   type: string | null
   fin?: string
   status?: string
   warningFaults?: string
+  records: NormalizedMflRecord[]
 }
 
 /** Compact fault summary shown in the hover card and the part detail panel. */
 interface FaultCard {
   fin: string
+  hasFin: boolean
   lruName: string
-  mflId: string
+  faultCode: string
+  severity: string
   description: string
+  count: number
 }
 
 interface FaultEntry {
   id: string
   partName: string
   card: FaultCard
+}
+
+/** A part/assembly of the loaded model, indexed by its FIN key. */
+interface PartInfo {
+  name: string
+  label: string
+  fin: string
+  hasFin: boolean
 }
 
 /** A fault's numbered pin, positioned in screen space over the canvas. */
@@ -285,6 +333,8 @@ const isolatedPartName = ref('')
 const isolatedName = ref('')
 const partDetailPanelOpen = ref(false)
 const partNames = ref<string[]>([])
+// FIN anahtarı -> model parçası. MFL `finNumber` alanı bu index üzerinden parçaya bağlanır.
+const partIndex = ref<Map<string, PartInfo>>(new Map())
 const stageRef = ref<HTMLElement | null>(null)
 const transparentOthers = ref(false)
 const isDetailView = ref(false)
@@ -310,13 +360,22 @@ const faultDefs = computed<FaultDef[]>(() => {
   const raw: Partial<Fault>[] = (Array.isArray(props.faults) && props.faults.length)
     ? props.faults
     : (props.faultyPart ? [{ part: props.faultyPart, type: props.faultType ?? undefined }] : [])
-  // De-duplicate by part name while preserving order.
+  // De-duplicate by FIN key while preserving order.
   const seen = new Set<string>()
   const out: FaultDef[] = []
   for (const f of raw) {
-    if (!f || !f.part || seen.has(f.part)) continue
-    seen.add(f.part)
-    out.push({ part: f.part, type: f.type ?? null, fin: f.fin, status: f.status, warningFaults: f.warningFaults })
+    if (!f || !f.part) continue
+    const key = normalizeFin(f.part)
+    if (!key || seen.has(key)) continue
+    seen.add(key)
+    out.push({
+      key: f.part,
+      type: f.type ?? null,
+      fin: f.fin,
+      status: f.status,
+      warningFaults: f.warningFaults,
+      records: f.records ?? []
+    })
   }
   return out
 })
@@ -324,23 +383,25 @@ const faultDefs = computed<FaultDef[]>(() => {
 // Names of the parts/assemblies that should be highlighted red right now.
 const activeFaultNames = computed(() => {
   if (isDetailView.value) return detailFaultName.value ? [detailFaultName.value] : []
-  return faultDefs.value.map((f) => f.part)
+  return faultDefs.value.map((f) => partInfoFor(f.key)?.name ?? f.key)
 })
 
 /**
  * Fault list driving the side panel, the numbered pins and the hover detail cards.
- * Faults are always tied to a real, named part/assembly inside the model.
+ * A fault's MFL `finNumber` is resolved to the matching model part, so the list shows
+ * the readable part name while highlighting/isolation still work on the real node.
  */
 const faultEntries = computed<FaultEntry[]>(() => {
   if (isDetailView.value) {
-    return detailFaultName.value
-      ? [{ id: 'part:' + detailFaultName.value, partName: detailFaultName.value, card: makeFaultCard(detailFaultName.value, null) }]
+    const name = detailFaultName.value
+    return name
+      ? [{ id: 'fault:' + normalizeFin(name), partName: name, card: makeFaultCard({ key: name, type: null, records: [] }) }]
       : []
   }
   return faultDefs.value.map((f) => ({
-    id: 'part:' + f.part,
-    partName: f.part,
-    card: makeFaultCard(f.part, f.type, f)
+    id: 'fault:' + normalizeFin(f.key),
+    partName: partInfoFor(f.key)?.name ?? f.key,
+    card: makeFaultCard(f)
   }))
 })
 
@@ -354,44 +415,105 @@ const activeFaultLabel = computed(() => {
 })
 
 function statusClass(status: string | null | undefined) {
-  return /fault/i.test(status || '') ? 'is-fault' : 'is-warning'
+  const s = status || ''
+  if (/fault|critical|major|fail|error/i.test(s)) return 'is-fault'
+  if (/warn|caution|minor|advis/i.test(s)) return 'is-warning'
+  return 'is-info'
+}
+
+/** Empty values render as an em dash instead of a blank cell. */
+function dash(value: string | number | null | undefined) {
+  const s = value === null || value === undefined ? '' : String(value).trim()
+  return s || '—'
+}
+
+/** ISO timestamps are shown as readable UTC; anything else is passed through. */
+function formatDateTime(value: string | null | undefined) {
+  const s = String(value ?? '').trim()
+  if (!s) return '—'
+  const d = new Date(s)
+  if (Number.isNaN(d.getTime())) return s
+  return `${d.toISOString().slice(0, 19).replace('T', ' ')} UTC`
+}
+
+/** Model part matching a fault's FIN, or null when the FIN is not in the loaded model. */
+function partInfoFor(key: string | null | undefined): PartInfo | null {
+  const finKey = normalizeFin(key)
+  if (!finKey) return null
+  return partIndex.value.get(finKey) ?? null
+}
+
+/** MFL records belonging to a FIN (or part name). */
+function recordsForKey(key: string | null | undefined): NormalizedMflRecord[] {
+  const finKey = normalizeFin(key)
+  if (!finKey) return []
+  return props.mflList.filter((r) => (r.finKey || normalizeFin(r.fin)) === finKey)
 }
 
 /**
- * Build a compact fault summary card from aircraft fault + LRU/MFL API data.
- * Shown on hover (pin / list row). Full detail is in the part detail panel.
+ * Build a compact fault summary card from the fault's MFL records plus the part name
+ * parsed out of the model node (`_FLT2420MG002 - INVERTER, L` -> FIN + "INVERTER, L").
+ * Shown on hover (pin / list row) and at the top of the part detail panel.
  */
-function makeFaultCard(part: string, _type: string | null, override: Partial<FaultDef> = {}): FaultCard {
-  const mflRecords = props.mflList.filter((r) => r.part === part || r.finNumber === part)
-  const primaryMfl = mflRecords[0] ?? null
+function makeFaultCard(def: FaultDef): FaultCard {
+  const info = partInfoFor(def.key)
+  const records = def.records.length ? def.records : recordsForKey(def.key)
+  const primary = records[0] ?? null
+  const fallback = parseFinValue(def.fin || def.key)
+
+  const fin = info?.fin || fallback.fin
+  const hasFin = info ? info.hasFin : fallback.hasFin
+  let lruName = info?.label || primary?.lruFieldName || primary?.lruModelName || def.key
+  if (hasFin && lruName === fin) lruName = ''
+
   return {
-    fin: override.fin ?? part,
-    lruName: part,
-    mflId: primaryMfl?.Fault_Code ?? primaryMfl?.MFL_Id ?? '—',
-    description: primaryMfl?.Description ?? override.warningFaults ?? '—'
+    fin,
+    hasFin: hasFin && !!fin,
+    lruName,
+    faultCode: primary?.faultCode || '—',
+    severity: primary?.severity || def.status || '—',
+    description: primary?.description || def.warningFaults || '—',
+    count: records.length
   }
 }
+
+/** FIN + readable name of the currently isolated part/assembly. */
+const activePart = computed(() => (isolatedName.value ? parsePartName(isolatedName.value) : null))
 
 /** Summary card for the currently isolated part (same fields as hover card). */
 const activeFaultSummary = computed(() => {
   const name = isolatedName.value
   if (!name) return null
-  const fault = faultDefs.value.find((f) => f.part === name)
-  return makeFaultCard(name, fault?.type ?? null, fault ?? {})
+  const finKey = normalizeFin(name)
+  const fault = faultDefs.value.find((f) => normalizeFin(f.key) === finKey)
+  return makeFaultCard(fault ?? { key: name, type: null, records: [] })
 })
 
-/** LRU record for the currently isolated part/assembly. */
+/** MFL records for the currently isolated part/assembly, matched by FIN. */
+const activeMflList = computed(() => recordsForKey(isolatedName.value))
+
+/**
+ * LRU identity of the isolated part. Preferred source is the optional `lruList` prop;
+ * otherwise it is taken from the MFL record's LRU model/field names.
+ */
 const activeLru = computed(() => {
   const name = isolatedName.value
   if (!name) return null
-  return props.lruList.find((r) => r.part === name) ?? null
+  const record = props.lruList.find((r) => normalizeFin(r.part) === normalizeFin(name)) ?? null
+  const primary = activeMflList.value[0] ?? null
+  const modelName = record?.LRU_Instance_Name || primary?.lruModelName || ''
+  const fieldName = primary?.lruFieldName || ''
+  const serialNo = record?.LRU_Serial_No || ''
+  if (!modelName && !fieldName && !serialNo) return null
+  return { modelName, fieldName, serialNo }
 })
 
-/** MFL records for the currently isolated part/assembly. */
-const activeMflList = computed(() => {
-  const name = isolatedName.value
-  if (!name) return []
-  return props.mflList.filter((r) => r.part === name)
+/** Flight/aircraft context shared by every MFL record of the isolated part. */
+const activeContext = computed(() => {
+  const primary = activeMflList.value[0] ?? null
+  if (!primary) return null
+  if (!primary.flightNo && !primary.aircraftName && !primary.fleetName && !primary.missionType) return null
+  return primary
 })
 
 watch(activeFaultNames, () => {
@@ -524,7 +646,7 @@ function loop() {
       if (isIsolated.value && entry.partName !== isolatedName.value) return
       const bbox = new THREE.Box3()
       modelGroup!.traverse((obj) => {
-        if (isMesh(obj) && meshMatchesPart(obj, entry.partName)) bbox.union(new THREE.Box3().setFromObject(obj))
+        if (isMesh(obj) && meshMatchesKey(obj, entry.partName)) bbox.union(new THREE.Box3().setFromObject(obj))
       })
       if (bbox.isEmpty()) return
       bbox.getCenter(worldPos)
@@ -574,6 +696,7 @@ function disposeObject(obj: THREE.Object3D) {
 function clearModel() {
   meshesCount.value = 0
   partNames.value = []
+  partIndex.value = new Map()
   isIsolated.value = false
   isolatedPartName.value = ''
   isolatedName.value = ''
@@ -584,6 +707,7 @@ function clearModel() {
   if (!modelGroup) return
   while (modelGroup.children.length) {
     const obj = modelGroup.children[0]
+    if (!obj) break
     modelGroup.remove(obj)
     disposeObject(obj)
   }
@@ -593,7 +717,7 @@ function clearModel() {
 function meshIsFaulty(mesh: THREE.Object3D) {
   const names = activeFaultNames.value
   for (const n of names) {
-    if (meshMatchesPart(mesh, n)) return true
+    if (meshMatchesKey(mesh, n)) return true
   }
   return false
 }
@@ -676,20 +800,20 @@ function onPointerMove(event: PointerEvent) {
   modelGroup.traverse((obj) => {
     if (isMesh(obj) && obj.visible) meshes.push(obj)
   })
-  const hits = raycaster.intersectObjects(meshes, false)
+  const hit = raycaster.intersectObjects(meshes, false)[0]
 
-  if (!hits.length) {
+  if (!hit) {
     clearHover()
     return
   }
 
   canvas.style.cursor = viewOnly.value ? 'default' : 'pointer'
-  const obj = hits[0].object as THREE.Mesh
+  const obj = hit.object as THREE.Mesh
   setHovered(obj)
   // If the hovered mesh belongs to one of the faults, show that fault's card.
   let matchedId: string | null = null
   for (const e of faultEntries.value) {
-    if (meshMatchesPart(obj, e.partName)) {
+    if (meshMatchesKey(obj, e.partName)) {
       matchedId = e.id
       break
     }
@@ -712,10 +836,10 @@ function onPointerDown(event: PointerEvent) {
   modelGroup.traverse((obj) => {
     if (isMesh(obj) && obj.visible) meshes.push(obj)
   })
-  const hits = raycaster.intersectObjects(meshes, false)
-  if (!hits.length) return
+  const hit = raycaster.intersectObjects(meshes, false)[0]
+  if (!hit) return
 
-  const clicked = hits[0].object as THREE.Mesh
+  const clicked = hit.object as THREE.Mesh
   if (props.detailModelUrl && props.detailFaultyPart && meshIsFaulty(clicked)) {
     // Detail-view switch: when user clicks a faulty part, swap to the detail model.
     isDetailView.value = true
@@ -739,7 +863,7 @@ function onPointerDown(event: PointerEvent) {
 // Return the fault part/assembly name that the given mesh belongs to, or '' if none.
 function faultNameForMesh(mesh: THREE.Object3D): string {
   for (const e of faultEntries.value) {
-    if (meshMatchesPart(mesh, e.partName)) return e.partName
+    if (meshMatchesKey(mesh, e.partName)) return e.partName
   }
   return ''
 }
@@ -772,13 +896,19 @@ function isolateByName(name: string) {
   const matches: THREE.Mesh[] = []
   modelGroup.traverse((obj) => {
     if (!isMesh(obj)) return
-    const m = meshMatchesPart(obj, name)
+    const m = meshMatchesKey(obj, name)
     obj.visible = m
     if (m) matches.push(obj)
   })
-  if (!matches.length) return
-  isolatedPartName.value = name
-  isolatedName.value = name
+  if (!matches.length) {
+    // FIN modelde yoksa görünürlüğü bozmadan geri al.
+    modelGroup.traverse((obj) => {
+      if (isMesh(obj)) obj.visible = true
+    })
+    return
+  }
+  isolatedPartName.value = partInfoFor(name)?.name ?? name
+  isolatedName.value = isolatedPartName.value
   partDetailPanelOpen.value = true
   isIsolated.value = true
   const bbox = new THREE.Box3()
@@ -902,6 +1032,21 @@ function meshMatchesPart(mesh: THREE.Object3D | null, name: string): boolean {
 }
 
 /**
+ * True if `key` identifies this mesh either by exact node/assembly name or by FIN.
+ * MFL faults arrive as a `finNumber` (e.g. "2420MG002") while the model node is named
+ * "_FLT2420MG002 - INVERTER, L", so every lookup goes through the normalized FIN too.
+ */
+function meshMatchesKey(mesh: THREE.Object3D | null, key: string): boolean {
+  if (!key || !mesh) return false
+  if (meshMatchesPart(mesh, key)) return true
+  const finKey = normalizeFin(key)
+  if (!finKey) return false
+  if (mesh.userData.partFin === finKey) return true
+  const fins = mesh.userData.partFins
+  return Array.isArray(fins) && fins.includes(finKey)
+}
+
+/**
  * Bake a mesh's world transform into a fresh position(+normal+index)-only geometry, so
  * all geometries of one part can be merged (mergeGeometries needs matching attributes).
  *
@@ -991,11 +1136,33 @@ function renderGltf(gltf: GLTF) {
       wireframe: wireframe.value
     })
     const mesh = new THREE.Mesh(merged, material)
+    const path = partPaths.get(partName) || [partName]
+    const parsed = parsePartName(partName)
     mesh.userData.partName = partName
-    mesh.userData.partPath = partPaths.get(partName) || [partName]
+    mesh.userData.partLabel = parsed.label
+    mesh.userData.partFin = parsed.finKey
+    mesh.userData.partPath = path
+    mesh.userData.partFins = path.map((n) => parsePartName(n).finKey)
     modelGroup.add(mesh)
     meshesCount.value += 1
   }
+
+  // FIN -> parça indeksi. Yaprak parçalar önce yazılır, ardından üst montaj adları;
+  // böylece MFL `finNumber` hem tekil parçaya hem de bir montaja denk gelebilir.
+  const index = new Map<string, PartInfo>()
+  const addToIndex = (name: string) => {
+    const parsed = parsePartName(name)
+    if (!parsed.finKey || index.has(parsed.finKey)) return
+    index.set(parsed.finKey, {
+      name,
+      label: parsed.label,
+      fin: parsed.fin,
+      hasFin: parsed.hasFin
+    })
+  }
+  for (const partName of order) addToIndex(partName)
+  for (const partName of order) (partPaths.get(partName) || []).forEach(addToIndex)
+  partIndex.value = index
 
   // Free the original (now-unused) glTF scene resources.
   root.traverse((obj) => {
@@ -1162,12 +1329,39 @@ onBeforeUnmount(() => {
 }
 
 .part-detail-heading {
-  font-size: 18px;
-  font-weight: 800;
-  color: var(--text-primary);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
   margin-bottom: 16px;
   padding-bottom: 12px;
   border-bottom: 2px solid var(--color-primary-600);
+}
+
+.part-fin-badge {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+  padding: 2px 8px;
+  border-radius: 4px;
+  color: #b91c1c;
+  background: rgba(220, 38, 38, 0.12);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.part-detail-name {
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.25;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.part-detail-empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 .part-detail-list {
@@ -1224,6 +1418,30 @@ onBeforeUnmount(() => {
   margin-bottom: 0;
 }
 
+.mfl-block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.mfl-code {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.mfl-description {
+  margin: 0 0 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
 .detail-status {
   display: inline-block;
   font-size: 11px;
@@ -1241,6 +1459,11 @@ onBeforeUnmount(() => {
 .detail-status.is-warning {
   color: #92400e;
   background: #fef3c7;
+}
+
+.detail-status.is-info {
+  color: #1e40af;
+  background: #dbeafe;
 }
 
 .stage {
@@ -1362,8 +1585,27 @@ onBeforeUnmount(() => {
   justify-content: center;
 }
 
-.fault-list-name {
+.fault-list-text {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.fault-list-fin {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  color: #ef4444;
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fault-list-name {
   min-width: 0;
   font-size: 12px;
   font-weight: 600;
@@ -1371,6 +1613,16 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.fault-list-count {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--text-muted);
+  background: var(--hover-bg, rgba(120, 120, 120, 0.15));
 }
 
 .fault-list-mfl {
