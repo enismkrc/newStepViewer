@@ -91,8 +91,12 @@
             <div class="fault-card-row fault-card-desc"><span class="fault-card-label">Description:</span> {{ activeFaultLabel.card.description }}</div>
           </div>
         </div>
-        <div v-if="hasFaults && !isIsolated" class="fault-list-panel">
-          <div class="fault-list-title">Faults ({{ faultEntries.length }})</div>
+        <div
+          v-if="hasFaults && !isIsolated"
+          class="fault-list-panel"
+          :style="{ width: faultPanelWidth + 'px' }"
+        >
+          <div class="fault-list-title">Faults ({{ faultRecordCount }})</div>
           <ul class="fault-list">
             <li
               v-for="(f, i) in faultEntries"
@@ -106,12 +110,17 @@
               <span class="fault-list-num">{{ i + 1 }}</span>
               <span class="fault-list-text">
                 <span v-if="f.card.hasFin" class="fault-list-fin">{{ f.card.fin }}</span>
-                <span v-if="f.card.lruName" class="fault-list-name">{{ f.card.lruName }}</span>
+                <span v-if="f.card.lruName" class="fault-list-name" :title="f.card.lruName">{{ f.card.lruName }}</span>
               </span>
               <span v-if="f.card.count > 1" class="fault-list-count">{{ f.card.count }}</span>
-              <span class="fault-list-mfl">{{ f.card.faultCode }}</span>
             </li>
           </ul>
+          <div
+            class="fault-list-resizer"
+            title="Drag to resize — double-click to reset"
+            @pointerdown="startFaultPanelResize"
+            @dblclick="faultPanelWidth = FAULT_PANEL_DEFAULT_WIDTH"
+          ></div>
         </div>
       </div>
       <aside v-if="isIsolated && partDetailPanelOpen && isolatedName" class="part-detail-panel">
@@ -131,29 +140,23 @@
           <span class="part-detail-name">{{ activePart?.label || isolatedName }}</span>
         </div>
 
-        <dl v-if="activeFaultSummary && activeFaultSummary.count" class="part-detail-list">
-          <dt v-if="activeFaultSummary.hasFin">FIN Number</dt>
-          <dd v-if="activeFaultSummary.hasFin">{{ activeFaultSummary.fin }}</dd>
+        <dl v-if="activeMflList.length" class="part-detail-list">
+          <dt v-if="activePart?.hasFin">FIN Number</dt>
+          <dd v-if="activePart?.hasFin">{{ activePart.fin }}</dd>
           <dt>Part</dt>
-          <dd>{{ dash(activeFaultSummary.lruName || activePart?.label) }}</dd>
-          <dt>Fault Code</dt>
-          <dd>{{ activeFaultSummary.faultCode }}</dd>
-          <dt>Severity</dt>
-          <dd><span class="detail-status" :class="statusClass(activeFaultSummary.severity)">{{ activeFaultSummary.severity }}</span></dd>
-          <dt>Description</dt>
-          <dd>{{ activeFaultSummary.description }}</dd>
+          <dd>{{ dash(activePart?.label) }}</dd>
+          <dt>Fault Count</dt>
+          <dd>{{ activeMflList.length }}</dd>
         </dl>
         <p v-else class="part-detail-empty">No MFL record for this part.</p>
 
         <div v-if="activeLru" class="detail-section">
           <h4 class="detail-section-title">LRU</h4>
           <dl class="part-detail-list">
-            <dt>LRU Model</dt>
+            <dt>LRU Model Name</dt>
             <dd>{{ dash(activeLru.modelName) }}</dd>
-            <dt>LRU Field</dt>
+            <dt>LRU Field Name</dt>
             <dd>{{ dash(activeLru.fieldName) }}</dd>
-            <dt v-if="activeLru.serialNo">LRU Serial No.</dt>
-            <dd v-if="activeLru.serialNo">{{ activeLru.serialNo }}</dd>
           </dl>
         </div>
 
@@ -180,8 +183,11 @@
               <span class="mfl-code">{{ dash(m.faultCode) }}</span>
               <span class="detail-status" :class="statusClass(m.severity)">{{ dash(m.severity) }}</span>
             </div>
-            <p class="mfl-description">{{ dash(m.description) }}</p>
             <dl class="part-detail-list">
+              <dt>Description</dt>
+              <dd>{{ dash(m.description) }}</dd>
+              <dt v-if="lruFieldVaries">LRU Field Name</dt>
+              <dd v-if="lruFieldVaries">{{ dash(m.lruFieldName) }}</dd>
               <dt>Category</dt>
               <dd>{{ dash(m.category) }}</dd>
               <dt>Location</dt>
@@ -220,7 +226,7 @@ import { observeStageBackground, readStageColor } from '../three/sceneBackground
 import { disposeMaterial, isMesh, setMaterialWireframe, standardMaterialOf } from '../three/meshUtils'
 import type { DisposableObject } from '../three/meshUtils'
 import { normalizeFin, parseFinValue, parsePartName } from '../three/partNaming'
-import type { Fault, LruRecord, NormalizedMflRecord } from '@/types/api-types'
+import type { Fault, NormalizedMflRecord } from '@/types/api-types'
 import type { ViewConfigPartial } from '@/types/view-types'
 
 /** Normalized fault definition, from either the `faults` array or `faultyPart`. */
@@ -306,9 +312,10 @@ const props = defineProps({
    * When provided, this takes precedence over the single `faultyPart`/`faultType`.
    */
   faults: { type: Array as PropType<Fault[]>, default: () => [] },
-  /** LRU records for this aircraft (from API). Linked to parts via `part` field. */
-  lruList: { type: Array as PropType<LruRecord[]>, default: () => [] },
-  /** MFL records for this aircraft (from API). Linked to parts via `part` field. */
+  /**
+   * MFL records for this aircraft (from API). Part detail panelinin TEK veri kaynağıdır;
+   * kayıtlar `finNumber` üzerinden model parçalarına bağlanır.
+   */
   mflList: { type: Array as PropType<NormalizedMflRecord[]>, default: () => [] },
   /**
    * Optional per-aircraft viewer tuning (from API / mock JSON).
@@ -352,6 +359,41 @@ const faultLabels = ref<FaultLabel[]>([])
 const hoveredFaultId = ref<string | null>(null)
 const shownFaultId = computed(() => hoveredFaultId.value)
 
+// Fault listesi paneli sağ kenarından sürüklenerek genişletilebilir (uzun parça adları
+// için). Çift tıklama varsayılan genişliğe döndürür.
+const FAULT_PANEL_DEFAULT_WIDTH = 248
+const FAULT_PANEL_MIN_WIDTH = 200
+const FAULT_PANEL_MAX_WIDTH = 640
+const faultPanelWidth = ref(FAULT_PANEL_DEFAULT_WIDTH)
+
+function startFaultPanelResize(event: PointerEvent) {
+  const handle = event.currentTarget as HTMLElement | null
+  if (!handle) return
+  event.preventDefault()
+  event.stopPropagation()
+
+  const startX = event.clientX
+  const startWidth = faultPanelWidth.value
+  const stageWidth = stageRef.value?.clientWidth ?? FAULT_PANEL_MAX_WIDTH
+  const maxWidth = Math.max(FAULT_PANEL_MIN_WIDTH, Math.min(FAULT_PANEL_MAX_WIDTH, stageWidth - 24))
+
+  const onMove = (e: PointerEvent) => {
+    const next = startWidth + (e.clientX - startX)
+    faultPanelWidth.value = Math.min(maxWidth, Math.max(FAULT_PANEL_MIN_WIDTH, next))
+  }
+  const onUp = () => {
+    handle.removeEventListener('pointermove', onMove)
+    handle.removeEventListener('pointerup', onUp)
+    handle.removeEventListener('pointercancel', onUp)
+    if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId)
+  }
+
+  handle.setPointerCapture(event.pointerId)
+  handle.addEventListener('pointermove', onMove)
+  handle.addEventListener('pointerup', onUp)
+  handle.addEventListener('pointercancel', onUp)
+}
+
 /**
  * Normalized list of fault definitions for the current aircraft. Supports either the
  * multi-fault `faults` array or the single `faultyPart`/`faultType` props.
@@ -367,6 +409,9 @@ const faultDefs = computed<FaultDef[]>(() => {
     if (!f || !f.part) continue
     const key = normalizeFin(f.part)
     if (!key || seen.has(key)) continue
+    // MFL bu uçakta bulunmayan parçaların (ör. başka bir ATA bölümü) faultlarını da
+    // döndürebiliyor; modelde karşılığı olmayan FIN'ler hiç listelenmez.
+    if (!partIndex.value.has(key)) continue
     seen.add(key)
     out.push({
       key: f.part,
@@ -406,6 +451,14 @@ const faultEntries = computed<FaultEntry[]>(() => {
 })
 
 const hasFaults = computed(() => faultEntries.value.length > 0)
+
+/**
+ * Panel başlığındaki sayı: listelenen satır (FIN) adedi değil, o FIN'lere bağlı toplam
+ * MFL kaydı adedi. Bir parçada birden fazla arıza olabildiği için ikisi aynı değil.
+ */
+const faultRecordCount = computed(() =>
+  faultEntries.value.reduce((sum, e) => sum + e.card.count, 0)
+)
 
 // The single detail card to render (only the hovered fault), if it is on screen.
 const activeFaultLabel = computed(() => {
@@ -480,40 +533,49 @@ function makeFaultCard(def: FaultDef): FaultCard {
 /** FIN + readable name of the currently isolated part/assembly. */
 const activePart = computed(() => (isolatedName.value ? parsePartName(isolatedName.value) : null))
 
-/** Summary card for the currently isolated part (same fields as hover card). */
-const activeFaultSummary = computed(() => {
-  const name = isolatedName.value
-  if (!name) return null
-  const finKey = normalizeFin(name)
-  const fault = faultDefs.value.find((f) => normalizeFin(f.key) === finKey)
-  return makeFaultCard(fault ?? { key: name, type: null, records: [] })
-})
-
 /** MFL records for the currently isolated part/assembly, matched by FIN. */
 const activeMflList = computed(() => recordsForKey(isolatedName.value))
 
 /**
- * LRU identity of the isolated part. Preferred source is the optional `lruList` prop;
- * otherwise it is taken from the MFL record's LRU model/field names.
+ * Bir parçanın MFL kayıtları aynı alanı farklı değerlerle taşıyabilir (ör. iki ayrı
+ * uçuş). Tekrarsız değerleri tek satırda birleştirir.
  */
+function uniqueJoined(values: Array<string | null | undefined>): string {
+  const out: string[] = []
+  for (const value of values) {
+    const s = String(value ?? '').trim()
+    if (s && !out.includes(s)) out.push(s)
+  }
+  return out.join(', ')
+}
+
+/** LRU kimliği: tamamen MFL kayıtlarındaki LRU model/field adlarından okunur. */
 const activeLru = computed(() => {
-  const name = isolatedName.value
-  if (!name) return null
-  const record = props.lruList.find((r) => normalizeFin(r.part) === normalizeFin(name)) ?? null
-  const primary = activeMflList.value[0] ?? null
-  const modelName = record?.LRU_Instance_Name || primary?.lruModelName || ''
-  const fieldName = primary?.lruFieldName || ''
-  const serialNo = record?.LRU_Serial_No || ''
-  if (!modelName && !fieldName && !serialNo) return null
-  return { modelName, fieldName, serialNo }
+  const records = activeMflList.value
+  if (!records.length) return null
+  const modelName = uniqueJoined(records.map((r) => r.lruModelName))
+  const fieldName = uniqueJoined(records.map((r) => r.lruFieldName))
+  if (!modelName && !fieldName) return null
+  return { modelName, fieldName }
 })
 
-/** Flight/aircraft context shared by every MFL record of the isolated part. */
+/** Fault code'lar tekil olduğu için LRU field adı kayıttan kayda değişebilir. */
+const lruFieldVaries = computed(() => {
+  const names = new Set(activeMflList.value.map((r) => r.lruFieldName).filter(Boolean))
+  return names.size > 1
+})
+
+/** Uçuş/uçak bilgisi de MFL kayıtlarından gelir (MFL birden fazla uçuşu kapsayabilir). */
 const activeContext = computed(() => {
-  const primary = activeMflList.value[0] ?? null
-  if (!primary) return null
-  if (!primary.flightNo && !primary.aircraftName && !primary.fleetName && !primary.missionType) return null
-  return primary
+  const records = activeMflList.value
+  if (!records.length) return null
+  return {
+    flightNo: uniqueJoined(records.map((r) => r.flightNo)),
+    missionType: uniqueJoined(records.map((r) => r.missionType)),
+    aircraftName: uniqueJoined(records.map((r) => r.aircraftName)),
+    fleetName: uniqueJoined(records.map((r) => r.fleetName)),
+    fleetBase: uniqueJoined(records.map((r) => r.fleetBase))
+  }
 })
 
 watch(activeFaultNames, () => {
@@ -1434,14 +1496,6 @@ onBeforeUnmount(() => {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
-.mfl-description {
-  margin: 0 0 12px;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--text-primary);
-  word-break: break-word;
-}
-
 .detail-status {
   display: inline-block;
   font-size: 11px;
@@ -1522,7 +1576,8 @@ onBeforeUnmount(() => {
   position: absolute;
   top: 12px;
   left: 12px;
-  width: 248px;
+  min-width: 200px;
+  max-width: calc(100% - 24px);
   max-height: calc(100% - 24px);
   display: flex;
   flex-direction: column;
@@ -1547,6 +1602,8 @@ onBeforeUnmount(() => {
 
 .fault-list {
   margin: 0;
+  /* Sağdaki boşluk, kaydırma çubuğunun sürükleme kolunun altında kalmasını önler. */
+  margin-right: 8px;
   padding: 4px;
   list-style: none;
   overflow-y: auto;
@@ -1625,13 +1682,21 @@ onBeforeUnmount(() => {
   background: var(--hover-bg, rgba(120, 120, 120, 0.15));
 }
 
-.fault-list-mfl {
-  flex-shrink: 0;
-  font-size: 10px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  color: var(--text-muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+.fault-list-resizer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  touch-action: none;
+  background: transparent;
+  transition: background 0.12s ease;
+}
+
+.fault-list-resizer:hover,
+.fault-list-resizer:active {
+  background: linear-gradient(to right, transparent, rgba(220, 38, 38, 0.35));
 }
 
 .fault-list-status {

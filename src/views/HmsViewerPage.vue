@@ -22,7 +22,6 @@
           :view-config="model.viewConfig"
           :faults="faults"
           :mfl-list="mflList"
-          :lru-list="[]"
         />
       </div>
     </template>

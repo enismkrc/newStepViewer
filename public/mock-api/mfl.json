@@ -23,6 +23,17 @@
       "Description": "N2 vibration peak 1.8x threshold. Recommend borescope inspection."
     },
     {
+      "part": "Left engine",
+      "MFL_Id": "MFL-2026-00140",
+      "MFL_Field_Name": "ENG_N2_VIB2",
+      "MFL_Description": "Left engine N2 vibration exceedance",
+      "MFL_Absulut_time": "2026-06-10T14:32:20Z",
+      "MFL_Relative_Time": "T+00:12:47",
+      "Fault_Code": "72-017",
+      "Severity": "FAULT",
+      "Description": "N2 vibration peak 1.8x threshold. Recommend borescope inspection."
+    },
+    {
       "part": "Landing gear",
       "MFL_Id": "MFL-2026-00158",
       "MFL_Field_Name": "LG_WOW_SENSOR",
