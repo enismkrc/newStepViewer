@@ -55,7 +55,7 @@
       <div v-if="errorText" class="errorText">{{ errorText }}</div>
     </div>
 
-    <div class="stage-wrapper" :class="{ 'stage-wrapper-split': isIsolated && isolatedName && partDetailPanelOpen }">
+    <div class="stage-wrapper" :class="{ 'stage-wrapper-split': partDetailVisible }">
       <div class="stage" ref="stageRef">
         <canvas ref="canvasEl" class="canvas"></canvas>
         <button
@@ -116,7 +116,7 @@
                 <span v-if="f.card.hasFin" class="fault-list-fin">{{ f.card.fin }}</span>
                 <span v-if="f.card.lruName" class="fault-list-name" :title="f.card.lruName">{{ f.card.lruName }}</span>
               </span>
-              <span v-if="f.card.count > 1" class="fault-list-count">{{ f.card.count }}</span>
+              <span class="fault-list-count">{{ f.card.count }}</span>
             </li>
           </ul>
           <div
@@ -127,7 +127,15 @@
           ></div>
         </div>
       </div>
-      <aside v-if="isIsolated && partDetailPanelOpen && isolatedName" class="part-detail-panel">
+      <div
+        v-if="partDetailVisible"
+        class="part-detail-resizer"
+        :style="{ right: partPanelWidth - 4 + 'px' }"
+        title="Drag to resize — double-click to reset"
+        @pointerdown="startPartPanelResize"
+        @dblclick="resetPartPanelWidth"
+      ></div>
+      <aside v-if="partDetailVisible" class="part-detail-panel" :style="{ width: partPanelWidth + 'px' }">
         <div class="part-detail-panel-header">
           <h3 class="part-detail-title">Part Detail</h3>
           <Button
@@ -157,10 +165,8 @@
         <div v-if="activeLru" class="detail-section">
           <h4 class="detail-section-title">LRU</h4>
           <dl class="part-detail-list">
-            <dt>LRU Model Name</dt>
-            <dd>{{ dash(activeLru.modelName) }}</dd>
-            <dt>LRU Field Name</dt>
-            <dd>{{ dash(activeLru.fieldName) }}</dd>
+            <dt>LRU Name</dt>
+            <dd>{{ activeLru.name }}</dd>
           </dl>
         </div>
 
@@ -182,28 +188,23 @@
 
         <div v-if="activeMflList.length" class="detail-section">
           <h4 class="detail-section-title">MFL ({{ activeMflList.length }})</h4>
-          <div v-for="m in activeMflList" :key="m.id" class="mfl-block">
-            <div class="mfl-block-head">
-              <span class="mfl-code">{{ dash(m.faultCode) }}</span>
-              <span class="detail-status" :class="statusClass(m.severity)">{{ dash(m.severity) }}</span>
-            </div>
+          <div v-for="(m, i) in activeMflList" :key="m.id" class="mfl-block" :class="severityClass(m.severity)">
+            <div class="mfl-index">MFL {{ i + 1 }}</div>
             <dl class="part-detail-list">
+              <dt>Fault Code</dt>
+              <dd>{{ dash(m.faultCode) }}</dd>
+              <dt>Severity</dt>
+              <dd class="mfl-severity" :class="severityClass(m.severity)">{{ dash(m.severity) }}</dd>
               <dt>Description</dt>
               <dd>{{ dash(m.description) }}</dd>
-              <dt v-if="lruFieldVaries">LRU Field Name</dt>
-              <dd v-if="lruFieldVaries">{{ dash(m.lruFieldName) }}</dd>
+              <dt>LRU Field Name</dt>
+              <dd>{{ dash(m.lruFieldName) }}</dd>
               <dt>Category</dt>
               <dd>{{ dash(m.category) }}</dd>
-              <dt>Location</dt>
-              <dd>{{ dash(m.location) }}</dd>
               <dt>ATA Chapter</dt>
               <dd>{{ dash(m.ataChapterCode) }}</dd>
               <dt>Absolute Time</dt>
               <dd>{{ formatDateTime(m.absoluteTime) }}</dd>
-              <dt>Relative Time</dt>
-              <dd>{{ dash(m.relativeTime) }}</dd>
-              <dt v-if="m.mflMetaId">MFL Meta Id</dt>
-              <dd v-if="m.mflMetaId">{{ m.mflMetaId }}</dd>
             </dl>
           </div>
         </div>
@@ -214,7 +215,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import type { PropType } from 'vue'
+import type { PropType, Ref } from 'vue'
 import Button from 'primevue/button'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
@@ -357,6 +358,8 @@ const detailFaultName = ref('')
 // While a part is being inspected the 3D view is read-only: clicking a part (or any of
 // its sub-parts) must not change the view. "Back to model" is the only way out.
 const viewOnly = computed(() => isIsolated.value || isDetailView.value)
+// Part detail paneli (ve onunla birlikte sahnenin bölünmüş yerleşimi) görünür mü.
+const partDetailVisible = computed(() => isIsolated.value && partDetailPanelOpen.value && !!isolatedName.value)
 // Screen-space overlay labels for every fault (named parts).
 // Each: { id, num, x, y, card: { fin, partName, status, warningFaults } }
 const faultLabels = ref<FaultLabel[]>([])
@@ -366,27 +369,45 @@ const faultLabels = ref<FaultLabel[]>([])
 const hoveredFaultId = ref<string | null>(null)
 const shownFaultId = computed(() => hoveredFaultId.value)
 
-// Fault listesi paneli sağ kenarından sürüklenerek genişletilebilir (uzun parça adları
+// Her iki yan panel de kenarından sürüklenerek genişletilebilir (uzun parça/alan adları
 // için). Çift tıklama varsayılan genişliğe döndürür.
 const FAULT_PANEL_DEFAULT_WIDTH = 248
 const FAULT_PANEL_MIN_WIDTH = 200
 const FAULT_PANEL_MAX_WIDTH = 640
-const faultPanelWidth = ref(FAULT_PANEL_DEFAULT_WIDTH)
+const PART_PANEL_DEFAULT_WIDTH = 340
+const PART_PANEL_MIN_WIDTH = 260
+const PART_PANEL_MAX_WIDTH = 720
+// Part detail büyürken 3D sahnenin altına düşmemesi gereken genişlik.
+const MIN_STAGE_WIDTH = 320
 
-function startFaultPanelResize(event: PointerEvent) {
+const faultPanelWidth = ref(FAULT_PANEL_DEFAULT_WIDTH)
+const partPanelWidth = ref(PART_PANEL_DEFAULT_WIDTH)
+
+interface PanelResizeOptions {
+  width: Ref<number>
+  min: number
+  /** Sürükleme başlarken hesaplanan üst sınır. */
+  max: () => number
+  /** Kolun panelin hangi kenarında olduğu: sağ kenar 1, sol kenar -1. */
+  sign: 1 | -1
+  /** Genişlik her değiştiğinde çalışır (ör. canvas'ı yeni boyuta uydurmak için). */
+  onStep?: () => void
+}
+
+function startPanelResize(event: PointerEvent, options: PanelResizeOptions) {
   const handle = event.currentTarget as HTMLElement | null
   if (!handle) return
   event.preventDefault()
   event.stopPropagation()
 
   const startX = event.clientX
-  const startWidth = faultPanelWidth.value
-  const stageWidth = stageRef.value?.clientWidth ?? FAULT_PANEL_MAX_WIDTH
-  const maxWidth = Math.max(FAULT_PANEL_MIN_WIDTH, Math.min(FAULT_PANEL_MAX_WIDTH, stageWidth - 24))
+  const startWidth = options.width.value
+  const maxWidth = Math.max(options.min, options.max())
 
   const onMove = (e: PointerEvent) => {
-    const next = startWidth + (e.clientX - startX)
-    faultPanelWidth.value = Math.min(maxWidth, Math.max(FAULT_PANEL_MIN_WIDTH, next))
+    const next = startWidth + options.sign * (e.clientX - startX)
+    options.width.value = Math.min(maxWidth, Math.max(options.min, next))
+    options.onStep?.()
   }
   const onUp = () => {
     handle.removeEventListener('pointermove', onMove)
@@ -399,6 +420,33 @@ function startFaultPanelResize(event: PointerEvent) {
   handle.addEventListener('pointermove', onMove)
   handle.addEventListener('pointerup', onUp)
   handle.addEventListener('pointercancel', onUp)
+}
+
+function startFaultPanelResize(event: PointerEvent) {
+  startPanelResize(event, {
+    width: faultPanelWidth,
+    min: FAULT_PANEL_MIN_WIDTH,
+    sign: 1,
+    max: () => Math.min(FAULT_PANEL_MAX_WIDTH, (stageRef.value?.clientWidth ?? FAULT_PANEL_MAX_WIDTH) - 24)
+  })
+}
+
+function startPartPanelResize(event: PointerEvent) {
+  startPanelResize(event, {
+    width: partPanelWidth,
+    min: PART_PANEL_MIN_WIDTH,
+    sign: -1,
+    max: () => {
+      const wrapperWidth = stageRef.value?.parentElement?.clientWidth ?? PART_PANEL_MAX_WIDTH
+      return Math.min(PART_PANEL_MAX_WIDTH, wrapperWidth - MIN_STAGE_WIDTH)
+    },
+    onStep: onResize
+  })
+}
+
+function resetPartPanelWidth() {
+  partPanelWidth.value = PART_PANEL_DEFAULT_WIDTH
+  onResize()
 }
 
 /**
@@ -472,11 +520,22 @@ const activeFaultLabel = computed(() => {
   return faultLabels.value.find((l) => l.id === id) || null
 })
 
-function statusClass(status: string | null | undefined) {
-  const s = status || ''
-  if (/fault|critical|major|fail|error/i.test(s)) return 'is-fault'
-  if (/warn|caution|minor|advis/i.test(s)) return 'is-warning'
-  return 'is-info'
+// Backend severity ölçeği. Sıra hem listeleme hem renklendirme için kullanılır;
+// tanınmayan değerler en sona düşer ve renksiz gösterilir.
+const SEVERITY_ORDER = ['critical', 'high', 'medium', 'low']
+
+function severityLevel(severity: string | null | undefined): string {
+  return String(severity ?? '').trim().toLowerCase()
+}
+
+function severityRank(severity: string | null | undefined): number {
+  const index = SEVERITY_ORDER.indexOf(severityLevel(severity))
+  return index === -1 ? SEVERITY_ORDER.length : index
+}
+
+function severityClass(severity: string | null | undefined): string {
+  const level = severityLevel(severity)
+  return SEVERITY_ORDER.includes(level) ? `is-${level}` : ''
 }
 
 /** Empty values render as an em dash instead of a blank cell. */
@@ -539,8 +598,13 @@ function makeFaultCard(def: FaultDef): FaultCard {
 /** FIN + readable name of the currently isolated part/assembly. */
 const activePart = computed(() => (isolatedName.value ? parsePartName(isolatedName.value) : null))
 
-/** MFL records for the currently isolated part/assembly, matched by FIN. */
-const activeMflList = computed(() => recordsForKey(isolatedName.value))
+/**
+ * MFL records for the currently isolated part/assembly, matched by FIN and ordered
+ * critical > high > medium > low. Aynı seviyedeki kayıtlar geliş sırasını korur.
+ */
+const activeMflList = computed(() =>
+  recordsForKey(isolatedName.value).sort((a, b) => severityRank(a.severity) - severityRank(b.severity))
+)
 
 /**
  * Bir parçanın MFL kayıtları aynı alanı farklı değerlerle taşıyabilir (ör. iki ayrı
@@ -555,20 +619,15 @@ function uniqueJoined(values: Array<string | null | undefined>): string {
   return out.join(', ')
 }
 
-/** LRU kimliği: tamamen MFL kayıtlarındaki LRU model/field adlarından okunur. */
+/**
+ * LRU adı MFL kayıtlarındaki LRU model adından okunur. Field adı kayıttan kayda
+ * değiştiği için burada değil, her MFL kaydının kendi bloğunda gösterilir.
+ */
 const activeLru = computed(() => {
   const records = activeMflList.value
   if (!records.length) return null
-  const modelName = uniqueJoined(records.map((r) => r.lruModelName))
-  const fieldName = uniqueJoined(records.map((r) => r.lruFieldName))
-  if (!modelName && !fieldName) return null
-  return { modelName, fieldName }
-})
-
-/** Fault code'lar tekil olduğu için LRU field adı kayıttan kayda değişebilir. */
-const lruFieldVaries = computed(() => {
-  const names = new Set(activeMflList.value.map((r) => r.lruFieldName).filter(Boolean))
-  return names.size > 1
+  const name = uniqueJoined(records.map((r) => r.lruModelName))
+  return name ? { name } : null
 })
 
 /** Uçuş/uçak bilgisi de MFL kayıtlarından gelir (MFL birden fazla uçuşu kapsayabilir). */
@@ -1338,6 +1397,7 @@ onBeforeUnmount(() => {
 }
 
 .stage-wrapper {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -1371,12 +1431,35 @@ onBeforeUnmount(() => {
 }
 
 .part-detail-panel {
-  width: 340px;
+  container-type: inline-size;
+  container-name: part-detail;
+  min-width: 260px;
   max-width: 100%;
   padding: 20px 18px;
   background: var(--bg-primary);
   overflow-y: auto;
   overflow-x: hidden;
+}
+
+/*
+ * Kol panelin İÇİNDE değil, wrapper'a göre konumlanır: panel dikey kayan bir kap
+ * olduğu için içine konsaydı içerikle birlikte kayıp gözden kaybolurdu.
+ */
+.part-detail-resizer {
+  position: absolute;
+  top: 0;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  touch-action: none;
+  background: transparent;
+  transition: background 0.12s ease;
+  z-index: 10;
+}
+
+.part-detail-resizer:hover,
+.part-detail-resizer:active {
+  background: rgba(37, 99, 235, 0.35);
 }
 
 .part-detail-panel-header {
@@ -1432,31 +1515,74 @@ onBeforeUnmount(() => {
   color: var(--text-muted);
 }
 
+/*
+ * Etiket ve değer, aralarındaki boşluk komşu satırlarınkinden belirgin şekilde küçük
+ * tutularak ve her satır ince bir çizgiyle ayrılarak görsel olarak eşleştirilir.
+ */
 .part-detail-list {
   margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
 }
 
 .part-detail-list dt {
-  font-size: 11px;
+  margin: 0 0 3px;
+  font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.07em;
   color: var(--text-muted);
-  margin: 0 0 2px 0;
 }
 
 .part-detail-list dd {
-  margin: 0 0 4px 0;
+  margin: 0 0 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-color);
   font-size: 13px;
+  font-weight: 600;
   line-height: 1.5;
   color: var(--text-primary);
+  word-break: break-word;
 }
 
 .part-detail-list dd:last-of-type {
   margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+/*
+ * Panel yeterince genişletildiğinde etiketler sola hizalı ayrı bir sütuna geçer; dar
+ * kaldığında üstteki dikey düzen korunur. Container query desteklenmeyen tarayıcıda
+ * dikey düzen kullanılmaya devam eder.
+ */
+@container part-detail (min-width: 360px) {
+  .part-detail-list {
+    display: grid;
+    grid-template-columns: 128px minmax(0, 1fr);
+    align-items: baseline;
+  }
+
+  .part-detail-list dt {
+    margin: 0;
+    padding: 9px 12px 9px 0;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .part-detail-list dd {
+    margin: 0;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .part-detail-list dt:first-of-type,
+  .part-detail-list dd:first-of-type {
+    padding-top: 0;
+  }
+
+  .part-detail-list dt:last-of-type,
+  .part-detail-list dd:last-of-type {
+    padding-bottom: 0;
+    border-bottom: none;
+  }
 }
 
 .detail-section {
@@ -1466,19 +1592,33 @@ onBeforeUnmount(() => {
 }
 
 .detail-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 0 0 12px;
   font-size: 12px;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 
+.detail-section-title::before {
+  content: '';
+  flex-shrink: 0;
+  width: 3px;
+  height: 13px;
+  border-radius: 2px;
+  background: var(--color-primary-600);
+}
+
+/* Soldaki renkli şerit, kayıtları severity'ye göre göz gezdirerek ayırt etmeyi sağlar. */
 .mfl-block {
-  padding: 12px;
-  margin-bottom: 10px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
+  border-left: 3px solid var(--border-color);
   border-radius: 8px;
 }
 
@@ -1486,44 +1626,51 @@ onBeforeUnmount(() => {
   margin-bottom: 0;
 }
 
-.mfl-block-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 8px;
+.mfl-block.is-critical {
+  border-left-color: #dc2626;
 }
 
-.mfl-code {
-  font-size: 13px;
+.mfl-block.is-high {
+  border-left-color: #ea580c;
+}
+
+.mfl-block.is-medium {
+  border-left-color: #ca8a04;
+}
+
+.mfl-block.is-low {
+  border-left-color: #0284c7;
+}
+
+.mfl-index {
+  margin-bottom: 10px;
+  font-size: 10px;
   font-weight: 800;
-  color: var(--text-primary);
-  font-variant-numeric: tabular-nums;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
 
-.detail-status {
-  display: inline-block;
-  font-size: 11px;
+.mfl-severity {
   font-weight: 800;
-  letter-spacing: 0.03em;
-  padding: 2px 8px;
-  border-radius: 4px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
-.detail-status.is-fault {
-  color: #b91c1c;
-  background: #fee2e2;
+.mfl-severity.is-critical {
+  color: #dc2626;
 }
 
-.detail-status.is-warning {
-  color: #92400e;
-  background: #fef3c7;
+.mfl-severity.is-high {
+  color: #ea580c;
 }
 
-.detail-status.is-info {
-  color: #1e40af;
-  background: #dbeafe;
+.mfl-severity.is-medium {
+  color: #ca8a04;
+}
+
+.mfl-severity.is-low {
+  color: #0284c7;
 }
 
 .stage {
