@@ -85,10 +85,14 @@
               <span class="fault-card-label">Part:</span> {{ activeFaultLabel.card.lruName }}
             </div>
             <div class="fault-card-row">
-              <span class="fault-card-label">Fault Code:</span> {{ activeFaultLabel.card.faultCode }}
-              <span class="detail-status" :class="statusClass(activeFaultLabel.card.severity)">{{ activeFaultLabel.card.severity }}</span>
+              <span class="fault-card-label">Faults:</span> {{ activeFaultLabel.card.count }}
             </div>
-            <div class="fault-card-row fault-card-desc"><span class="fault-card-label">Description:</span> {{ activeFaultLabel.card.description }}</div>
+            <div v-if="activeFaultLabel.card.count === 1" class="fault-card-row fault-card-desc">
+              <span class="fault-card-label">Description:</span> {{ activeFaultLabel.card.description }}
+            </div>
+            <div v-else class="fault-card-row fault-card-desc fault-card-hint">
+              Click the part to see all fault records.
+            </div>
           </div>
         </div>
         <div
@@ -233,20 +237,23 @@ import type { ViewConfigPartial } from '@/types/view-types'
 interface FaultDef {
   /** Raw match key: MFL `finNumber` (or a plain part name for the legacy props). */
   key: string
-  type: string | null
   fin?: string
-  status?: string
   warningFaults?: string
   records: NormalizedMflRecord[]
 }
 
-/** Compact fault summary shown in the hover card and the part detail panel. */
+/**
+ * Compact fault summary shown in the fault list and the hover card.
+ *
+ * Fault code / severity bilerek yer almaz: bir parçanın onlarca MFL kaydı olabilir ve
+ * bunlar kayıttan kayda değişir. Tekil değerler yalnızca part detail panelinde,
+ * her MFL kaydının kendi bloğunda gösterilir.
+ */
 interface FaultCard {
   fin: string
   hasFin: boolean
   lruName: string
-  faultCode: string
-  severity: string
+  /** Yalnızca tek MFL kaydı varsa anlamlı; birden fazlasında hover kartı gizler. */
   description: string
   count: number
 }
@@ -415,9 +422,7 @@ const faultDefs = computed<FaultDef[]>(() => {
     seen.add(key)
     out.push({
       key: f.part,
-      type: f.type ?? null,
       fin: f.fin,
-      status: f.status,
       warningFaults: f.warningFaults,
       records: f.records ?? []
     })
@@ -440,7 +445,7 @@ const faultEntries = computed<FaultEntry[]>(() => {
   if (isDetailView.value) {
     const name = detailFaultName.value
     return name
-      ? [{ id: 'fault:' + normalizeFin(name), partName: name, card: makeFaultCard({ key: name, type: null, records: [] }) }]
+      ? [{ id: 'fault:' + normalizeFin(name), partName: name, card: makeFaultCard({ key: name, records: [] }) }]
       : []
   }
   return faultDefs.value.map((f) => ({
@@ -523,8 +528,6 @@ function makeFaultCard(def: FaultDef): FaultCard {
     fin,
     hasFin: hasFin && !!fin,
     lruName,
-    faultCode: primary?.faultCode || '—',
-    severity: primary?.severity || def.status || '—',
     description: primary?.description || def.warningFaults || '—',
     count: records.length
   }
@@ -1799,6 +1802,11 @@ onBeforeUnmount(() => {
 .fault-card-desc .fault-card-label {
   display: block;
   margin-bottom: 2px;
+}
+
+.fault-card-hint {
+  color: var(--text-muted);
+  font-style: italic;
 }
 
 .canvas {
