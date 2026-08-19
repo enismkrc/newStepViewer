@@ -229,7 +229,7 @@ import { mergeViewConfig, applyModelOrientation, frameCameraOnBox } from '../thr
 import { observeStageBackground, readStageColor } from '../three/sceneBackground'
 import { disposeMaterial, isMesh, setMaterialWireframe, standardMaterialOf } from '../three/meshUtils'
 import type { DisposableObject } from '../three/meshUtils'
-import { normalizeFin, parseFinValue, parsePartName } from '../three/partNaming'
+import { finKeyOf, parseFinValue, parsePartName } from '../three/partNaming'
 import type { Fault, NormalizedMflRecord } from '@/types/api-types'
 import type { ViewConfigPartial } from '@/types/view-types'
 
@@ -414,7 +414,7 @@ const faultDefs = computed<FaultDef[]>(() => {
   const out: FaultDef[] = []
   for (const f of raw) {
     if (!f || !f.part) continue
-    const key = normalizeFin(f.part)
+    const key = finKeyOf(f.part)
     if (!key || seen.has(key)) continue
     // MFL bu uçakta bulunmayan parçaların (ör. başka bir ATA bölümü) faultlarını da
     // döndürebiliyor; modelde karşılığı olmayan FIN'ler hiç listelenmez.
@@ -445,11 +445,11 @@ const faultEntries = computed<FaultEntry[]>(() => {
   if (isDetailView.value) {
     const name = detailFaultName.value
     return name
-      ? [{ id: 'fault:' + normalizeFin(name), partName: name, card: makeFaultCard({ key: name, records: [] }) }]
+      ? [{ id: 'fault:' + finKeyOf(name), partName: name, card: makeFaultCard({ key: name, records: [] }) }]
       : []
   }
   return faultDefs.value.map((f) => ({
-    id: 'fault:' + normalizeFin(f.key),
+    id: 'fault:' + finKeyOf(f.key),
     partName: partInfoFor(f.key)?.name ?? f.key,
     card: makeFaultCard(f)
   }))
@@ -496,16 +496,19 @@ function formatDateTime(value: string | null | undefined) {
 
 /** Model part matching a fault's FIN, or null when the FIN is not in the loaded model. */
 function partInfoFor(key: string | null | undefined): PartInfo | null {
-  const finKey = normalizeFin(key)
+  const finKey = finKeyOf(key)
   if (!finKey) return null
   return partIndex.value.get(finKey) ?? null
 }
 
-/** MFL records belonging to a FIN (or part name). */
+/**
+ * MFL records belonging to a FIN. `key` ham FIN de olabilir, tam node adı da
+ * ("_FLT2420MG002 - INVERTER, L"); ikisi de aynı anahtara indirgenir.
+ */
 function recordsForKey(key: string | null | undefined): NormalizedMflRecord[] {
-  const finKey = normalizeFin(key)
+  const finKey = finKeyOf(key)
   if (!finKey) return []
-  return props.mflList.filter((r) => (r.finKey || normalizeFin(r.fin)) === finKey)
+  return props.mflList.filter((r) => (r.finKey || finKeyOf(r.fin)) === finKey)
 }
 
 /**
@@ -1104,7 +1107,7 @@ function meshMatchesPart(mesh: THREE.Object3D | null, name: string): boolean {
 function meshMatchesKey(mesh: THREE.Object3D | null, key: string): boolean {
   if (!key || !mesh) return false
   if (meshMatchesPart(mesh, key)) return true
-  const finKey = normalizeFin(key)
+  const finKey = finKeyOf(key)
   if (!finKey) return false
   if (mesh.userData.partFin === finKey) return true
   const fins = mesh.userData.partFins

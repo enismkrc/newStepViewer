@@ -6,7 +6,7 @@
  */
 
 import { fetchJson } from './hms-client'
-import { normalizeFin } from '@/three/partNaming'
+import { finKeyOf } from '@/three/partNaming'
 import type { Fault, MflRecord, NormalizedMflRecord } from '@/types/api-types'
 
 const MOCK_MFL_BY_FLIGHT = '/mock-api/mfl-by-flight.json'
@@ -73,7 +73,7 @@ export function mflListToFaults(mflList: MflRecord[]): Fault[] {
   const byFin = new Map<string, Fault>()
   mflList.forEach((row, index) => {
     const fin = String(row.finNumber ?? '').trim()
-    const key = normalizeFin(fin)
+    const key = finKeyOf(fin)
     if (!key) return
     if (!byFin.has(key)) {
       byFin.set(key, {
@@ -97,7 +97,7 @@ export function normalizeMflRecord(row: MflRecord, index = 0): NormalizedMflReco
   return {
     id: firstText(mflMetaId, row.lruFieldsMflId) || `${fin}:${faultCode}:${index}`,
     fin,
-    finKey: normalizeFin(fin),
+    finKey: finKeyOf(fin),
     faultCode,
     severity: firstText(row.severity),
     category: firstText(row.category),

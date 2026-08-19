@@ -58,6 +58,19 @@ function looksLikeFin(value: string): boolean {
   return !!value && !/\s/.test(value) && /\d/.test(value)
 }
 
+/**
+ * Herhangi bir değerden eşleştirme anahtarını üretir; girdi ister ham FIN
+ * ("2420MG002", "_FLT2420MG002") ister tam node adı ("_FLT2420MG002 - INVERTER, L")
+ * olsun aynı anahtarı döndürür.
+ *
+ * DİKKAT: `normalizeFin` bunu yapmaz — tam node adına uygulanırsa FIN ile parça adını
+ * birleştirip ("2420MG002INVERTERL") yanlış anahtar üretir. Eşleştirmede daima bu
+ * fonksiyon kullanılmalıdır.
+ */
+export function finKeyOf(value: string | null | undefined): string {
+  return parsePartName(value).finKey
+}
+
 export function parsePartName(raw: string | null | undefined): ParsedPartName {
   const value = String(raw ?? '').trim()
   const parts = splitName(value)
