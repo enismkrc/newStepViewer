@@ -1,18 +1,19 @@
 {
   "aircraft-1": [
-    { "id": "flight-101", "flightNo": "KF21-401" },
-    { "id": "flight-102", "flightNo": "KF21-402" }
+    { "id": "flight-101", "flightNo": "FLT-401" },
+    { "id": "flight-102", "flightNo": "FLT-402" },
+    { "id": "flight-103", "flightNo": "FLT-403" }
   ],
   "aircraft-2": [
-    { "id": "flight-201", "flightNo": "KF21-501" }
+    { "id": "flight-201", "flightNo": "FLT-501" }
   ],
   "aircraft-3": [
-    { "id": "flight-301", "flightNo": "KF21-601" }
+    { "id": "flight-301", "flightNo": "FLT-601" }
   ],
   "aircraft-5": [
-    { "id": "flight-501", "flightNo": "KF21-701" }
+    { "id": "flight-501", "flightNo": "FLT-701" }
   ],
   "aircraft-6": [
-    { "id": "flight-601", "flightNo": "KF21-801" }
+    { "id": "flight-601", "flightNo": "FLT-801" }
   ]
 }

@@ -38,8 +38,8 @@ Hiçbir backend kurmadan tüm akışı görebilirsiniz.
 Model dosyaları repoya dahil **değildir** (büyük binary). Kendi `.gltf`/`.glb`
 dosyanızı `public/` klasörüne koymanız gerekir.
 
-- Örnek: `public/KF-21.gltf` koyarsanız, uygulama içinden `/KF-21.gltf` ile erişilir.
-- `public/` altındaki her şey kök yoldan (`/dosya.gltf`) servis edilir.
+- Örnek: `public/aircraft-oml.glb` koyarsanız, uygulama içinden `/aircraft-oml.glb` ile erişilir.
+- `public/` altındaki her şey kök yoldan (`/dosya.glb`) servis edilir.
 
 > Model yüklenmiyorsa ilk kontrol: dosya gerçekten `public/` içinde mi ve adı
 > registry'deki `modelUrl` ile birebir aynı mı?
@@ -56,16 +56,16 @@ kullanacağı tek bir dosyada manuel tanımlanır:
 Eşleme önceliği (yukarıdan aşağı):
 1. Backend `modelUrl` döndürdüyse o kullanılır (ileride backend eklerse otomatik).
 2. `byAircraftId` → belirli bir uca (tail) özel model.
-3. `byModel` → uçağın `aircraftModel` alanına göre (örn. `"KF-21"`).
+3. `byModel` → uçağın `aircraftModel` alanına göre (örn. `"OML"`).
 4. `DEFAULT` → hiçbiri yoksa.
 
 ### Yeni bir model eklemek için:
 
-```js
+```ts
 // src/config/modelRegistry.ts içinde byModel:
 byModel: {
-  'KF-21': { modelUrl: '/KF-21.gltf', viewConfig: KF21_VIEW_CONFIG },
-  'F-16':  { modelUrl: '/models/F-16.gltf', viewConfig: { /* ... */ } }
+  OML:    { modelUrl: '/aircraft-oml.glb', viewConfig: OML_VIEW_CONFIG },
+  'F-16': { modelUrl: '/models/F-16.glb', viewConfig: { /* ... */ } }
 }
 ```
 
@@ -75,9 +75,116 @@ byModel: {
 > Bu zenginleştirme `src/api/fleet.ts` içinde `attachModel()` ile otomatik uygulanır;
 > `HmsViewerPage.vue` veya `HmsViewer.vue` tarafında değişiklik yapmanıza gerek yoktur.
 
+## 3.1 Ekipman (LRU) modelleri — çok modelli görüntüleme
+
+Uçağın tamamını tek bir GLB'de tutmak mümkün değil. Bu yüzden model iki katmana ayrılır:
+
+- **Dış kabuk:** Adım 3'teki `modelUrl` (tek dosya, uçağın gövdesi).
+- **Ekipmanlar:** her LRU için **ayrı** bir GLB dosyası.
+
+Bir uçuşta hangi FIN'lerde arıza varsa, dış kabukla birlikte **yalnızca o ekipmanların**
+modelleri yüklenir. Kullanıcı yan panelden arızasız ekipmanları da elle açabilir.
+
+### İki paketleme biçimi
+
+Ekipmanlar iki şekilde paketlenebilir; ikisi de aynı anda kullanılabilir:
+
+**1) LRU başına bir dosya**
+
+```
+public/XXX2400MG001-missileRight.glb
+```
+
+**2) Chapter başına tek dosya** — birden fazla LRU'yu barındırır, ayrım node adlarından
+yapılır:
+
+```
+public/ATA-27.glb
+  ATA27                        <- gövde node'u, FIN taşımaz, yok sayılır
+    _FLT2700CM001-ACTUATOR1
+    _FLT2700CM002-ACTUATOR2
+    _FLT2700CM003-ACTUATOR3
+```
+
+### Adlandırma sözleşmesi (hem dosya adı hem node adı)
+
+```
+XXX2400MG001-missileRight
+^^^ tag (önemsiz)
+   ^^^^^^^^^ FIN numarası — MFL kaydındaki finNumber ile eşleşir
+   ^^ ATA chapter kodu
+             ^^^^^^^^^^^^ panelde gösterilecek ad
+```
+
+Kural: baştaki rakam olmayan karakterler atılır, ilk tireye kadarı FIN'dir, FIN'in ilk iki
+hanesi ATA chapter'dır.
+
+Karar sırası: **dosya adı** kalıba uyuyorsa dosyanın tamamı o LRU'dur. Uymuyorsa dosyanın
+içindeki **node adlarına** bakılır ve kalıba uyan her node bağımsız bir LRU olur. İkisi de
+tutmazsa dosya ekipman sayılmaz (dış kabuk gibi).
+
+Chapter dosyasından tek bir LRU gerektiğinde yalnızca o node'un alt ağacı sahneye alınır;
+aynı dosyadan birden fazla LRU gerekiyorsa dosya bir kez indirilip bir kez ayrıştırılır.
+
+### Dosya listesi elle tutulmaz
+
+`npm run models:scan` `public/` klasörünü tarar ve `src/config/generatedLruModels.ts`
+dosyasını üretir. Bu script `npm run dev` ve `npm run build` öncesi **otomatik** çalışır
+(`predev` / `prebuild`). Yeni bir ekipman eklemek için dosyayı klasöre koymak yeterlidir;
+kod değişikliği gerekmez.
+
+Dosyalar doğrudan `public/` altındaysa tüm uçaklar için geçerli sayılır. Uçak modeline göre
+ayırmak isterseniz `public/models/<uçakModeli>/...` düzenini kullanın; klasör adı kapsam
+(`group`) olarak kaydedilir.
+
+Backend ileride FIN başına model URL'i döndürmeye başlarsa değişmesi gereken tek yer
+`resolveLruModels()` (`src/config/ataChapterRegistry.ts`) olur.
+
+### Konum bilgisi ve hizalama
+Ekipman modelleri gerçek uçak tasarımından export edildiği için **uçağın kendi koordinat
+sisteminde** gelir. Görüntüleyici her mesh'in world matrisini geometriye bake ettiği için
+dosyalar aynı sahneye yüklendiğinde kendiliğinden doğru yerlerine oturur; elle hizalama
+yapılmaz. Şart tek: tüm dosyalar aynı orijin ve ölçekle export edilmiş olmalı.
+
+Bunu doğrulamak için: `npm run models:inspect public/aircraft-oml.glb public/XXX2400MG001-missileRight.glb`
+Her dosyanın dünya koordinatlarındaki sınır kutusunu basar; ekipmanların kutuları kabuğun
+kutusunun içinde kalmalıdır.
+
+Bunun kazancı şu: bir ekipman değiştiğinde veya yeri kaydığında koca uçak modelini değil,
+sadece o ekipmanın GLB'sini değiştirmek yeterli.
+
+### Arıza → ekipman eşlemesi
+Arıza vurgusu ve izolasyon **kaynak bazlı** çalışır: bir LRU'nun tüm mesh'leri o LRU'nun
+FIN'i ile etiketlenir, `2400MG001` arızalıysa o etiketi taşıyan her şey kırmızıya boyanır.
+Bir ekipmanın herhangi bir alt parçasına tıklamak da ekipmanın tamamını seçer.
+
+Bu, LRU'nun kendi dosyası olması ile chapter dosyası içinde bir node olması arasında fark
+gözetmez. CAD export'ları alt şekilleri `COMPOUND007` gibi adlandırdığı için bu adlara
+dayanan bir eşleşme zaten mümkün değil; anlamlı olan tek kimlik FIN.
+
+ATA chapter kodu sırayla şuradan çözülür (bkz. `resolveAtaChapter`, `src/api/mfl.ts`):
+1. MFL kaydındaki `ataChapter` alanı (backend eklediğinde tek doğru kaynak).
+2. FIN'in ilk iki hanesi — `"2400MG001"` → `"24"`. Asıl sözleşme budur.
+3. `faultCode`'un ilk iki hanesi — `"32-021"` → `"32"`. Eski kayıtlar için yedek.
+
+### Görüntüleme davranışı
+- Ekipman modeli görünürken dış kabuk otomatik **yarı saydam** olur; başlıktaki
+  `Solid shell` / `Ghost shell` butonuyla değiştirilebilir.
+- **Dış kabuk tıklanamaz**, yalnızca görsel bağlamdır. Tıklama ve hover sadece ekipman
+  modellerini hedefler; böylece bir tık öndeki gövde yüzeyine takılmaz.
+- Bir ekipmanın herhangi bir alt parçasına tıklamak **ekipmanın tamamını** seçer, içindeki
+  `COMPOUND###` parçasını değil.
+- Kamera her zaman **dış kabuğun** sınır kutusuna göre çerçevelenir; yüklü ekipman sayısı
+  değişse de uçak ekranda aynı boyutta kalır. Yakın/uzak kesme düzlemleri ve yakınlaşma
+  sınırları modelin ölçeğine göre ayarlanır (bu CAD modelleri ~0.4 birim büyüklüğünde).
+- GLB dosyası bulunamayan ekipman panelde `no model` olarak devre dışı görünür,
+  görüntüleyici çalışmaya devam eder.
+
+---
+
 ### viewConfig nedir?
 Her uçağın kamera açısı/model yönü farklı olabilir. `viewConfig` ile ince ayar:
-- `modelRotation` : modeli döndür (radyan). KF-21'de burun -Z'ye baktığı için `y: Math.PI`.
+- `modelRotation` : modeli döndür (radyan). OML modeli CAD'den Z-up geldiği için `x: -Math.PI / 2`.
 - `cameraOffset`  : kameranın modele göre yönü.
 - `zoom`          : `fullModel` / `part` / `assembly` yakınlaşma çarpanları.
 - `swapFrontBack` : ViewCube FRONT/BACK etiketlerini takas eder.
@@ -189,7 +296,7 @@ Ana proje (TypeScript / `index.ts`) ile birleştirirken en sık yaşanan sorunla
     router zaten `import.meta.env.BASE_URL` okuduğu için otomatik uyumludur (bkz. adım 6).
 
 ### 5.3 Asset (model) yolu
-- Kod model yolunu kök (`/KF-21.gltf`) varsayar. Ana uygulama alt yolda sunuluyorsa
+- Kod model yolunu kök (`/aircraft-oml.glb`) varsayar. Ana uygulama alt yolda sunuluyorsa
   (`/hms/`) bu yol kırılır. Çözüm: `base`'i doğru ayarlayın **ve** registry'deki
   `modelUrl`'i `import.meta.env.BASE_URL` ile birleştirin ya da modelleri host'un
   kökünde servis edin.
@@ -234,6 +341,10 @@ Router otomatik uyumludur (`createWebHistory(import.meta.env.BASE_URL)`).
 | İhtiyaç | Dosya |
 |---|---|
 | modelUrl / model eşleme (manuel) | `src/config/modelRegistry.ts` |
+| Ekipman (LRU) GLB çözümleme + ATA chapter adları | `src/config/ataChapterRegistry.ts` |
+| Ekipman dosya listesi (otomatik üretilir) | `src/config/generatedLruModels.ts` |
+| `public/` tarama script'i (dosya + node adlarından FIN çıkarır) | `scripts/scan-models.mjs` |
+| GLB doğrulama (node adları + dünya sınırları) | `scripts/inspect-glb.mjs` |
 | **Ortak HTTP istemcisine bağlantı noktası** (entegrasyonda değişen tek dosya) | `src/api/http.ts` |
 | Mock ↔ gerçek geçişi (`fetchJson`) | `src/api/hms-client.ts` |
 | Filo & uçak servisleri | `src/api/fleet.ts` |
@@ -254,11 +365,13 @@ Router otomatik uyumludur (`createWebHistory(import.meta.env.BASE_URL)`).
 
 **Şu an eksik / dikkat edilmesi gerekenler:**
 
-1. **Model dosyaları repoda yok.** `public/KF-21.gltf` gibi dosyaları elle eklemelisiniz
-   (adım 2). Aksi halde görüntüleyici boş açılır.
-2. **`finNumber` ↔ glTF parça adı eşleşmesi.** Backend'in `finNumber` değerleri model
-   dosyasındaki node adlarıyla birebir aynı olmalı. Farklıysa kırmızı vurgu hiç çalışmaz.
-   *Öneri:* Backend ekibiyle bu adların standardını (büyük/küçük harf, boşluk) baştan netleştirin.
+1. **Model dosyaları repoda yok.** `public/aircraft-oml.glb` ve ekipman GLB'lerini elle
+   eklemelisiniz (adım 2). Aksi halde görüntüleyici boş açılır.
+2. **`finNumber` ↔ ekipman adı eşleşmesi.** Backend'in `finNumber` değeri, ekipman modelinin
+   adındaki FIN ile birebir aynı olmalı — dosya adı (`2400MG001` ↔ `XXX2400MG001-*.glb`) ya
+   da node adı (`2700CM002` ↔ `_FLT2700CM002-ACTUATOR2`). Farklıysa o ekipman yüklenmez ve
+   kırmızı vurgu çalışmaz.
+   *Öneri:* Backend ekibiyle FIN biçimini (büyük/küçük harf, dolgu sıfırları) baştan netleştirin.
 3. **LRU kullanılmıyor (karar).** `HmsViewerPage.vue` görüntüleyiciye `:lru-list="[]"`
    geçer; LRU paneli boş olduğundan render edilmez. `src/api/lru.ts` ileride lazım
    olursa diye duruyor, çağrılmıyor.
