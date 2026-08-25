@@ -76,6 +76,11 @@ export interface MflRecord {
   lruFieldName?: string
   ataChapterId?: string
   ataChapterCode?: string
+  /**
+   * ATA chapter kodu (örn. "24"). Backend doldurmazsa FIN'in veya faultCode'un
+   * ilk iki hanesinden türetilir (bkz. `resolveAtaChapter` @/api/mfl).
+   */
+  ataChapter?: string
 }
 
 /** Viewer'ın kullandığı sadeleştirilmiş MFL kaydı. Eksik alanlar boş string olur. */
@@ -111,6 +116,8 @@ export interface Fault {
   fin: string
   status: string
   warningFaults: string
+  /** Bu arızanın ait olduğu ATA chapter kodu (örn. "24"). Bilinmiyorsa boş. */
+  ataChapter?: string
   records: NormalizedMflRecord[]
 }
 

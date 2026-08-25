@@ -78,6 +78,21 @@
             @change="onFlightChange"
           />
         </div>
+
+        <!-- 5) ATA CHAPTER — rol bazlı erişimin demosu (elektrik teknisyeni yalnızca 24 vb.) -->
+        <div class="step" :class="{ disabled: !selectedFlightId }">
+          <label class="step-label">ATA Chapter</label>
+          <MultiSelect
+            v-model="selectedAtaCodes"
+            :options="ataOptions"
+            option-label="label"
+            option-value="code"
+            display="chip"
+            :placeholder="ataPlaceholder"
+            :disabled="!selectedFlightId || loadingAta || !ataOptions.length"
+            fluid
+          />
+        </div>
       </div>
 
       <div class="open-bar">
@@ -99,11 +114,19 @@ import type { HistoryState } from 'vue-router'
 import { computed, ref, onMounted } from 'vue'
 import Select from 'primevue/select'
 import type { SelectChangeEvent } from 'primevue/select'
+import MultiSelect from 'primevue/multiselect'
 import Button from 'primevue/button'
 import { findAllFleets, findAircraftByFleetId } from '../api/fleet'
 import { findFlightsByAircraftId } from '../api/flight'
+import { getFilteredMflData, uniqueAtaChapters } from '../api/mfl'
 import { attachModel } from '../config/modelRegistry'
+import { chapterLabel } from '../config/ataChapterRegistry'
 import type { Aircraft, Fleet, Flight } from '@/types/api-types'
+
+interface AtaOption {
+  code: string
+  label: string
+}
 
 const router = useRouter()
 
@@ -115,12 +138,15 @@ const flights = ref<Flight[]>([])
 const loadingFleets = ref(true)
 const loadingAircraft = ref(false)
 const loadingFlights = ref(false)
+const loadingAta = ref(false)
 const loadError = ref('')
 
 const selectedBase = ref('')
 const selectedFleetId = ref('')
 const selectedAircraftId = ref('')
 const selectedFlightId = ref('')
+const selectedAtaCodes = ref<string[]>([])
+const ataOptions = ref<AtaOption[]>([])
 
 // Fleet response'undaki `base` alanından benzersiz base listesi (alfabetik).
 const bases = computed(() => {
@@ -157,6 +183,13 @@ const flightPlaceholder = computed(() => {
   return 'Select a flight…'
 })
 
+const ataPlaceholder = computed(() => {
+  if (!selectedFlightId.value) return 'Select a flight first'
+  if (loadingAta.value) return 'Loading ATA chapters…'
+  if (!ataOptions.value.length) return 'No ATA chapters in this flight'
+  return 'Select ATA chapters…'
+})
+
 onMounted(async () => {
   try {
     const page = await findAllFleets({ page: 0, size: 200 })
@@ -169,6 +202,36 @@ onMounted(async () => {
   }
 })
 
+function clearAta() {
+  selectedAtaCodes.value = []
+  ataOptions.value = []
+}
+
+async function loadAtaForFlight(flightId: string) {
+  selectedFlightId.value = flightId
+  selectedAtaCodes.value = []
+  ataOptions.value = []
+  if (!flightId) return
+  loadingAta.value = true
+  loadError.value = ''
+  try {
+    const mfl = await getFilteredMflData(flightId)
+    ataOptions.value = uniqueAtaChapters(mfl).map((code) => ({
+      code,
+      label: `${code} — ${chapterLabel(code)}`
+    }))
+    // Tek chapter varsa rol seçimi belirsiz değil; otomatik işaretle.
+    if (ataOptions.value.length === 1) {
+      selectedAtaCodes.value = [ataOptions.value[0]!.code]
+    }
+  } catch (err) {
+    console.error('Failed to load ATA chapters:', err)
+    loadError.value = 'ATA chapter listesi yüklenemedi.'
+  } finally {
+    loadingAta.value = false
+  }
+}
+
 // PrimeVue Select @change payload: { originalEvent, value }
 function onBaseChange(e: SelectChangeEvent) {
   selectedBase.value = e.value
@@ -177,6 +240,7 @@ function onBaseChange(e: SelectChangeEvent) {
   selectedFlightId.value = ''
   aircraftList.value = []
   flights.value = []
+  clearAta()
 }
 
 async function onFleetChange(e: SelectChangeEvent) {
@@ -185,6 +249,7 @@ async function onFleetChange(e: SelectChangeEvent) {
   selectedFlightId.value = ''
   aircraftList.value = []
   flights.value = []
+  clearAta()
   if (!selectedFleetId.value) return
   loadingAircraft.value = true
   loadError.value = ''
@@ -202,12 +267,13 @@ async function onAircraftChange(e: SelectChangeEvent) {
   selectedAircraftId.value = e.value
   selectedFlightId.value = ''
   flights.value = []
+  clearAta()
   if (!selectedAircraftId.value) return
   loadingFlights.value = true
   try {
     flights.value = await findFlightsByAircraftId(selectedAircraftId.value)
     const onlyFlight = flights.value.length === 1 ? flights.value[0] : null
-    if (onlyFlight) selectedFlightId.value = onlyFlight.id
+    if (onlyFlight) await loadAtaForFlight(onlyFlight.id)
   } catch (err) {
     console.error('Failed to load flights:', err)
     loadError.value = 'Uçuş listesi yüklenemedi.'
@@ -217,12 +283,23 @@ async function onAircraftChange(e: SelectChangeEvent) {
 }
 
 function onFlightChange(e: SelectChangeEvent) {
-  selectedFlightId.value = e.value
+  loadAtaForFlight(String(e.value ?? ''))
 }
 
-const canOpen = computed(() => !!(selectedAircraftId.value && selectedFlightId.value))
+const canOpen = computed(() => {
+  if (!selectedAircraftId.value || !selectedFlightId.value || loadingAta.value) return false
+  // Chapter varsa en az biri seçilmeli — elektrik teknisyeni demosu (yalnızca ATA 24 vb.).
+  if (ataOptions.value.length) return selectedAtaCodes.value.length > 0
+  return true
+})
 const canReset = computed(() =>
-  !!(selectedBase.value || selectedFleetId.value || selectedAircraftId.value || selectedFlightId.value)
+  !!(
+    selectedBase.value ||
+    selectedFleetId.value ||
+    selectedAircraftId.value ||
+    selectedFlightId.value ||
+    selectedAtaCodes.value.length
+  )
 )
 
 function resetAll() {
@@ -232,6 +309,7 @@ function resetAll() {
   selectedFlightId.value = ''
   aircraftList.value = []
   flights.value = []
+  clearAta()
 }
 
 function goToView() {
@@ -243,6 +321,7 @@ function goToView() {
       aircraftId: selectedAircraftId.value,
       flightId: selectedFlightId.value
     },
+    query: selectedAtaCodes.value.length ? { ata: selectedAtaCodes.value.join(',') } : {},
     // fleet.js kullanılmasa bile viewer'da modelUrl garanti edilir.
     state: { aircraft: attachModel(ac ?? null) as unknown as HistoryState }
   })

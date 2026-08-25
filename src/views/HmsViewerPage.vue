@@ -12,14 +12,15 @@
     <template v-else>
       <div class="viewer-header">
         <span class="viewer-label">
-          {{ aircraft.tailNumber }} — {{ flightLabel }} — Model Viewer
+          {{ aircraft.tailNumber }} — {{ flightLabel }}{{ ataLabel }} — Model Viewer
         </span>
       </div>
       <div class="viewer-wrap">
         <HmsViewer
-          :key="`${aircraft.id}-${flightId}`"
+          :key="`${aircraft.id}-${flightId}-${selectedAtaCodes.join(',')}`"
           :model-url="model.modelUrl"
           :view-config="model.viewConfig"
+          :ata-chapters="ataChapters"
           :faults="faults"
           :mfl-list="mflList"
         />
@@ -33,23 +34,31 @@ import { ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { getAircraftById } from '../api/fleet'
 import { findFlightsByAircraftId } from '../api/flight'
-import { getFilteredMflData, mflListToFaults, flattenMflForViewer } from '../api/mfl'
+import { getFilteredMflData, mflListToFaults, flattenMflForViewer, parseAtaChapterQuery, filterMflByAtaChapters } from '../api/mfl'
 import { attachModel } from '../config/modelRegistry'
+import { resolveLruModels, groupByChapter } from '../config/ataChapterRegistry'
 import HmsViewer from '../components/HmsViewer.vue'
 import Button from 'primevue/button'
-import type { Aircraft, Fault, NormalizedMflRecord } from '@/types/api-types'
+import type { Aircraft, MflRecord } from '@/types/api-types'
 import type { ViewConfigPartial } from '@/types/view-types'
 
 const route = useRoute()
 
 const aircraft = ref<Aircraft | null>(null)
-const mflList = ref<NormalizedMflRecord[]>([])
-const faults = ref<Fault[]>([])
+const mflRaw = ref<MflRecord[]>([])
 const flightLabel = ref('')
 const loading = ref(true)
 const loadError = ref('')
 
 const flightId = computed(() => String(route.params.flightId ?? ''))
+const selectedAtaCodes = computed(() => parseAtaChapterQuery(route.query.ata))
+const ataLabel = computed(() =>
+  selectedAtaCodes.value.length ? ` — ATA ${selectedAtaCodes.value.join(', ')}` : ''
+)
+
+const visibleMfl = computed(() => filterMflByAtaChapters(mflRaw.value, selectedAtaCodes.value))
+const mflList = computed(() => flattenMflForViewer(visibleMfl.value))
+const faults = computed(() => mflListToFaults(visibleMfl.value))
 
 /** modelUrl/viewConfig attachModel ile loadViewerData içinde zenginleştirilir. */
 const model = computed<{ modelUrl: string; viewConfig: ViewConfigPartial | null }>(() => {
@@ -58,11 +67,21 @@ const model = computed<{ modelUrl: string; viewConfig: ViewConfigPartial | null 
   return { modelUrl: ac.modelUrl || '', viewConfig: ac.viewConfig ?? null }
 })
 
+/**
+ * Bu uçak için bulunan ekipman (LRU) modelleri, ATA chapter başlıkları altında gruplanmış.
+ * Seçili roller (query `ata`) varsa yalnızca o chapter'lar gösterilir.
+ */
+const ataChapters = computed(() => {
+  const groups = groupByChapter(resolveLruModels(aircraft.value))
+  const selected = selectedAtaCodes.value
+  if (!selected.length) return groups
+  return groups.filter((group) => selected.includes(group.code))
+})
+
 async function loadViewerData(aircraftId: string, fId: string) {
   loading.value = true
   loadError.value = ''
-  mflList.value = []
-  faults.value = []
+  mflRaw.value = []
   flightLabel.value = ''
   try {
     // Ana projede fleet.js kullanılmıyorsa giriş ekranı uçağı router state ile geçirir.
@@ -70,7 +89,7 @@ async function loadViewerData(aircraftId: string, fId: string) {
     const stateAircraft: Aircraft | null =
       fromState && String(fromState.id) === String(aircraftId) ? fromState : null
 
-    const [acRaw, flightRows, mflRaw] = await Promise.all([
+    const [acRaw, flightRows, mflRows] = await Promise.all([
       stateAircraft ? Promise.resolve(stateAircraft) : getAircraftById(aircraftId),
       findFlightsByAircraftId(aircraftId),
       getFilteredMflData(fId)
@@ -83,8 +102,7 @@ async function loadViewerData(aircraftId: string, fId: string) {
     }
     const flight = flightRows.find((f) => f.id === fId)
     flightLabel.value = flight?.flightNo ?? fId
-    mflList.value = flattenMflForViewer(mflRaw)
-    faults.value = mflListToFaults(mflRaw)
+    mflRaw.value = mflRows
   } catch (err) {
     console.error('Failed to load viewer data:', err)
     loadError.value = 'Uçuş / MFL verisi yüklenemedi.'

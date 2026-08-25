@@ -65,6 +65,58 @@ function firstText(...values: Array<string | number | null | undefined>): string
 }
 
 /**
+ * Bir MFL kaydının ATA chapter kodunu çözer. Sırayla:
+ *
+ *   1. Backend'in `ataChapter` alanı (eklendiğinde tek doğru kaynak olur).
+ *   2. `ataChapterCode` / `ataChapterId` içindeki ilk iki hane ("24-00-00" → "24").
+ *   3. FIN numarasının ilk iki hanesi — "2400MG001" → "24". Ekipman GLB dosyaları da
+ *      FIN'e göre adlandırıldığı için asıl sözleşme budur.
+ *   4. `faultCode`'un ilk iki hanesi — "32-021" → "32". Eski/adlandırılmamış kayıtlar için.
+ */
+export function resolveAtaChapter(row: MflRecord): string {
+  const explicit = firstText(row.ataChapter).match(/(\d{2})/)
+  if (explicit) return explicit[1] ?? ''
+  const fromCode = firstText(row.ataChapterCode, row.ataChapterId).match(/(\d{2})/)
+  if (fromCode) return fromCode[1] ?? ''
+  const fromFin = String(row.finNumber ?? '').trim().match(/^(\d{2})/)
+  if (fromFin) return fromFin[1] ?? ''
+  const fromFault = String(row.faultCode ?? '').trim().match(/^(\d{2})/)
+  return fromFault?.[1] ?? ''
+}
+
+/** Bir uçuşun MFL kayıtlarında görünen benzersiz ATA chapter kodları (örn. "24", "27"). */
+export function uniqueAtaChapters(mflList: MflRecord[]): string[] {
+  const codes = new Set<string>()
+  for (const row of mflList) {
+    const code = resolveAtaChapter(row)
+    if (code) codes.add(code)
+  }
+  return Array.from(codes).sort((a, b) => a.localeCompare(b))
+}
+
+/**
+ * `?ata=24,27` veya `?ata=24&ata=27` query değerini iki haneli chapter kodlarına çevirir.
+ * Rol bazlı görünümün demosu: seçilmemiş chapter'lar boş dizi olarak "hepsi" anlamına gelir.
+ */
+export function parseAtaChapterQuery(raw: unknown): string[] {
+  const parts = Array.isArray(raw) ? raw : [raw]
+  const out: string[] = []
+  for (const part of parts) {
+    for (const bit of String(part ?? '').split(',')) {
+      const code = bit.trim()
+      if (code && !out.includes(code)) out.push(code)
+    }
+  }
+  return out
+}
+
+export function filterMflByAtaChapters(mflList: MflRecord[], codes: string[]): MflRecord[] {
+  if (!codes.length) return mflList
+  const allowed = new Set(codes)
+  return mflList.filter((row) => allowed.has(resolveAtaChapter(row)))
+}
+
+/**
  * MFL satırlarını FIN numarasına göre gruplar. Aynı FIN'e ait tüm kayıtlar tek bir
  * fault altında toplanır; viewer bu FIN ile eşleşen parçayı highlight eder.
  */
@@ -82,10 +134,13 @@ export function mflListToFaults(mflList: MflRecord[]): Fault[] {
         fin,
         status: row.severity ?? 'FAULT',
         warningFaults: row.description ?? '',
+        ataChapter: resolveAtaChapter(row),
         records: []
       })
     }
-    byFin.get(key)!.records.push(normalizeMflRecord(row, index))
+    const fault = byFin.get(key)!
+    if (!fault.ataChapter) fault.ataChapter = resolveAtaChapter(row)
+    fault.records.push(normalizeMflRecord(row, index))
   })
   return Array.from(byFin.values())
 }
@@ -105,7 +160,7 @@ export function normalizeMflRecord(row: MflRecord, index = 0): NormalizedMflReco
     location: firstText(row.location),
     absoluteTime: firstText(row.absoluteTime),
     relativeTime: firstText(row.relativeTime),
-    ataChapterCode: firstText(row.ataChapterCode, row.ataChapterId),
+    ataChapterCode: firstText(row.ataChapterCode, row.ataChapterId, resolveAtaChapter(row)),
     lruModelName: firstText(row.IruModelName, row.lruModelName),
     lruFieldName: firstText(row.IruFieldName, row.lruFieldName),
     flightNo: firstText(row.FlightNo, row.flightNo),

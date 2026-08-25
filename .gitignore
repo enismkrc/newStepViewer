@@ -30,6 +30,10 @@ coverage
 *.tsbuildinfo
 
 # 3D model assets (large; keep locally, do not commit)
-public/KF-21.gltf
-public/KF-21.bin
-public/KF-21*
+public/**/*.glb
+public/**/*.gltf
+public/**/*.bin
+
+# Derived from the model files above by `npm run models:scan`, which every npm entry point
+# runs first (predev / prebuild / pretype-check). Committing it would only create churn.
+src/config/generatedLruModels.ts
