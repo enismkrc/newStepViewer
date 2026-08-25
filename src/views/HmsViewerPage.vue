@@ -6,7 +6,7 @@
     <div v-else-if="!aircraft" class="viewer-error">
       <p>{{ loadError || 'Aircraft not found.' }}</p>
       <router-link :to="{ name: 'Entry' }" custom v-slot="{ navigate }">
-        <Button label="Back to selection" icon="pi pi-arrow-left" severity="secondary" text @click="navigate" />
+        <Button label="Back To Selection" icon="pi pi-arrow-left" severity="secondary" text @click="navigate" />
       </router-link>
     </div>
     <template v-else>

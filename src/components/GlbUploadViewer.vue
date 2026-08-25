@@ -46,7 +46,7 @@
         />
         <Button
           v-if="isIsolated && isolatedPartName"
-          :label="partDetailPanelOpen ? 'Close detail' : 'Part detail'"
+          :label="partDetailPanelOpen ? 'Close Detail' : 'Part detail'"
           :severity="partDetailPanelOpen ? undefined : 'secondary'"
           :outlined="!partDetailPanelOpen"
           icon="pi pi-info-circle"

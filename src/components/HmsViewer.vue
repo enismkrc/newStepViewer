@@ -7,7 +7,7 @@
 
       <div class="controls">
         <router-link :to="{ name: 'Entry' }" custom v-slot="{ navigate }">
-          <Button label="Back to selection" icon="pi pi-arrow-left" severity="secondary" outlined :disabled="!modelLoaded" @click="navigate" />
+          <Button label="Back To Selection" icon="pi pi-arrow-left" severity="secondary" outlined :disabled="!modelLoaded" @click="navigate" />
         </router-link>
         <Button
           label="Reset View"
@@ -35,13 +35,13 @@
         />
         <Button
           v-if="isIsolated || isDetailView"
-          label="Back to model"
+          label="Back To Model"
           icon="pi pi-arrow-left"
           @click="showAllParts"
         />
         <Button
           v-if="isIsolated && isolatedName"
-          :label="partDetailPanelOpen ? 'Close detail' : 'Part detail'"
+          :label="partDetailPanelOpen ? 'Close Detail' : 'Part detail'"
           :severity="partDetailPanelOpen ? undefined : 'secondary'"
           :outlined="!partDetailPanelOpen"
           icon="pi pi-info-circle"
