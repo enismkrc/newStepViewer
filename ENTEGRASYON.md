@@ -38,8 +38,8 @@ Hiçbir backend kurmadan tüm akışı görebilirsiniz.
 Model dosyaları repoya dahil **değildir** (büyük binary). Kendi `.gltf`/`.glb`
 dosyanızı `public/` klasörüne koymanız gerekir.
 
-- Örnek: `public/aircraft-oml.glb` koyarsanız, uygulama içinden `/aircraft-oml.glb` ile erişilir.
-- `public/` altındaki her şey kök yoldan (`/dosya.glb`) servis edilir.
+- Örnek: `public/models/OML/aircraft-oml.glb` koyarsanız, uygulama içinden `/models/OML/aircraft-oml.glb` ile erişilir.
+- `public/` altındaki her şey kök yoldan (`/models/OML/dosya.glb`) servis edilir.
 
 > Model yüklenmiyorsa ilk kontrol: dosya gerçekten `public/` içinde mi ve adı
 > registry'deki `modelUrl` ile birebir aynı mı?
@@ -64,8 +64,8 @@ Eşleme önceliği (yukarıdan aşağı):
 ```ts
 // src/config/modelRegistry.ts içinde byModel:
 byModel: {
-  OML:    { modelUrl: '/aircraft-oml.glb', viewConfig: OML_VIEW_CONFIG },
-  'F-16': { modelUrl: '/models/F-16.glb', viewConfig: { /* ... */ } }
+  OML:    { modelUrl: '/models/OML/aircraft-oml.glb', viewConfig: OML_VIEW_CONFIG },
+  'F-16': { modelUrl: '/models/F-16/aircraft.glb', viewConfig: { /* ... */ } }
 }
 ```
 
@@ -89,22 +89,26 @@ modelleri yüklenir. Kullanıcı yan panelden arızasız ekipmanları da elle a�
 
 Ekipmanlar iki şekilde paketlenebilir; ikisi de aynı anda kullanılabilir:
 
-**1) LRU başına bir dosya**
+**1) LRU başına bir dosya** — chapter klasöründe onlarca GLB:
 
 ```
-public/XXX2400MG001-missileRight.glb
+public/models/OML/ATA-24/XXX2400MG001-missileRight.glb
+public/models/OML/ATA-24/XXX2400MG002-missileLeft.glb
 ```
 
-**2) Chapter başına tek dosya** — birden fazla LRU'yu barındırır, ayrım node adlarından
+**2) Chapter başına tek assembly** — birden fazla LRU'yu barındırır, ayrım node adlarından
 yapılır:
 
 ```
-public/ATA-27.glb
+public/models/OML/ATA-27/ATA-27.glb
   ATA27                        <- gövde node'u, FIN taşımaz, yok sayılır
     _FLT2700CM001-ACTUATOR1
     _FLT2700CM002-ACTUATOR2
     _FLT2700CM003-ACTUATOR3
 ```
+
+İkisi aynı klasörde bir arada olabilir. Klasör adı (`ATA-24`, `ATA_24`, `24`) yalnızca
+düzen içindir; FIN hâlâ dosya veya node adından okunur. `ATA-24` bir uçak adı **değildir**.
 
 ### Adlandırma sözleşmesi (hem dosya adı hem node adı)
 
@@ -133,9 +137,9 @@ dosyasını üretir. Bu script `npm run dev` ve `npm run build` öncesi **otomat
 (`predev` / `prebuild`). Yeni bir ekipman eklemek için dosyayı klasöre koymak yeterlidir;
 kod değişikliği gerekmez.
 
-Dosyalar doğrudan `public/` altındaysa tüm uçaklar için geçerli sayılır. Uçak modeline göre
-ayırmak isterseniz `public/models/<uçakModeli>/...` düzenini kullanın; klasör adı kapsam
-(`group`) olarak kaydedilir.
+Dosyalar `public/models/<uçakModeli>/ATA-24/` altındaysa yalnızca o uçak modeli için
+geçerlidir (`group` = klasör adı, örn. OML). Kabuk da aynı yerde durur:
+`public/models/OML/aircraft-oml.glb`.
 
 Backend ileride FIN başına model URL'i döndürmeye başlarsa değişmesi gereken tek yer
 `resolveLruModels()` (`src/config/ataChapterRegistry.ts`) olur.
@@ -146,7 +150,7 @@ sisteminde** gelir. Görüntüleyici her mesh'in world matrisini geometriye bake
 dosyalar aynı sahneye yüklendiğinde kendiliğinden doğru yerlerine oturur; elle hizalama
 yapılmaz. Şart tek: tüm dosyalar aynı orijin ve ölçekle export edilmiş olmalı.
 
-Bunu doğrulamak için: `npm run models:inspect public/aircraft-oml.glb public/XXX2400MG001-missileRight.glb`
+Bunu doğrulamak için: `npm run models:inspect public/models/OML/aircraft-oml.glb public/models/OML/ATA-24/XXX2400MG001-missileRight.glb`
 Her dosyanın dünya koordinatlarındaki sınır kutusunu basar; ekipmanların kutuları kabuğun
 kutusunun içinde kalmalıdır.
 
@@ -296,7 +300,7 @@ Ana proje (TypeScript / `index.ts`) ile birleştirirken en sık yaşanan sorunla
     router zaten `import.meta.env.BASE_URL` okuduğu için otomatik uyumludur (bkz. adım 6).
 
 ### 5.3 Asset (model) yolu
-- Kod model yolunu kök (`/aircraft-oml.glb`) varsayar. Ana uygulama alt yolda sunuluyorsa
+- Kod model yolunu `/models/OML/aircraft-oml.glb` varsayar. Ana uygulama alt yolda sunuluyorsa
   (`/hms/`) bu yol kırılır. Çözüm: `base`'i doğru ayarlayın **ve** registry'deki
   `modelUrl`'i `import.meta.env.BASE_URL` ile birleştirin ya da modelleri host'un
   kökünde servis edin.
@@ -365,7 +369,7 @@ Router otomatik uyumludur (`createWebHistory(import.meta.env.BASE_URL)`).
 
 **Şu an eksik / dikkat edilmesi gerekenler:**
 
-1. **Model dosyaları repoda yok.** `public/aircraft-oml.glb` ve ekipman GLB'lerini elle
+1. **Model dosyaları repoda yok.** `public/models/OML/aircraft-oml.glb` ve ekipman GLB'lerini elle
    eklemelisiniz (adım 2). Aksi halde görüntüleyici boş açılır.
 2. **`finNumber` ↔ ekipman adı eşleşmesi.** Backend'in `finNumber` değeri, ekipman modelinin
    adındaki FIN ile birebir aynı olmalı — dosya adı (`2400MG001` ↔ `XXX2400MG001-*.glb`) ya

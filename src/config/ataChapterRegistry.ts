@@ -64,8 +64,8 @@ export function chapterLabel(code: string): string {
  * Bir uçak için geçerli LRU modelleri.
  *
  * `group` alanı dolu olan modeller yalnızca o uçak modeline aittir (dosyalar
- * `public/models/<uçakModeli>/...` altında toplanmışsa). `group` boş olanlar (dosyalar
- * doğrudan `public/` altında) her uçak için geçerli sayılır.
+ * `public/models/<uçakModeli>/ATA-24/...` altında toplanmışsa). `ATA-24` klasörü
+ * group sayılmaz. `group` boş olanlar her uçak için geçerlidir.
  */
 export function resolveLruModels(aircraft: Aircraft | null): LruModel[] {
   if (!aircraft) return []

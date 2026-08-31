@@ -5,7 +5,7 @@
  * Bu script onu doğrulamak için kullanılır: ekipman dosyalarının sınır kutuları dış
  * kabuğun kutusunun içinde kalmalı.
  *
- *   npm run models:inspect -- public/aircraft-oml.glb public/ATA-27.glb
+ *   npm run models:inspect -- public/models/OML/aircraft-oml.glb public/models/OML/ATA-27/ATA-27.glb
  */
 
 import { basename } from 'node:path'

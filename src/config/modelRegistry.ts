@@ -28,7 +28,7 @@ const OML_VIEW_CONFIG: ViewConfigPartial = {
 }
 
 const OML_ENTRY: ModelEntry = {
-  modelUrl: '/aircraft-oml.glb',
+  modelUrl: '/models/OML/aircraft-oml.glb',
   viewConfig: OML_VIEW_CONFIG
 }
 

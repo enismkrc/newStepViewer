@@ -1,5 +1,5 @@
 {
-  "_comment": "Backend'in gerçek yanıt şekli: modelUrl/viewConfig YOK. Bunlar src/config/modelRegistry.ts içinde aircraftModel'e göre eşlenir ('OML' -> /aircraft-oml.glb).",
+  "_comment": "Backend'in gerçek yanıt şekli: modelUrl/viewConfig YOK. Bunlar src/config/modelRegistry.ts içinde aircraftModel'e göre eşlenir ('OML' -> /models/OML/aircraft-oml.glb).",
   "fleet-1": [
     {
       "id": "aircraft-1",

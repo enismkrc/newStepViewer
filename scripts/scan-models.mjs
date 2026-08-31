@@ -5,14 +5,18 @@
  * dosyasını üretir. Tarayıcı bir klasörü kendi başına listeleyemediği için bu manifest
  * gerekir; `npm run dev` / `build` / `type-check` öncesi otomatik çalışır.
  *
- * İki paketleme biçimi desteklenir; ikisi de AYNI adlandırma kuralını kullanır:
+ * Önerilen düzen — chapter klasörleri (onlarca GLB'yi yönetmek için):
  *
- *   1) LRU başına bir dosya          public/XXX2400MG001-missileRight.glb
- *   2) Chapter başına tek dosya      public/ATA-27.glb, içindeki node adları:
- *                                      _FLT2700CM001-ACTUATOR1
- *                                      _FLT2700CM002-ACTUATOR2
+ *   public/models/OML/aircraft-oml.glb   <- dış kabuk (ekipman sayılmaz)
+ *   public/models/OML/ATA-24/
+ *     XXX2400MG001-missileRight.glb      <- LRU başına bir dosya
+ *   public/models/OML/ATA-27/
+ *     ATA-27.glb                         <- chapter assembly; LRU'lar node adından
  *
- * Adlandırma kuralı (hem dosya hem node adı için):
+ * Yeni bir uçak: public/models/<uçakModeli>/ altında aynı düzen.
+ * Klasör adı (`ATA-24`, `ATA_24`, `24`) chapter kovasıdır, uçak adı değildir.
+ *
+ * İki paketleme biçimi aynı klasörde bir arada olabilir; adlandırma kuralı aynıdır.
  *
  *   XXX2400MG001-missileRight
  *   ^^^ tag (önemsiz)
@@ -20,16 +24,8 @@
  *      ^^ ATA chapter kodu
  *                ^^^^^^^^^^^^ ekranda gösterilecek ad
  *
- * Baştaki rakam olmayan karakterler atılır, ilk tireye kadarı FIN'dir, FIN'in ilk iki
- * hanesi ATA chapter'dır.
- *
  * Karar sırası: dosya adı FIN kalıbına uyuyorsa dosyanın TAMAMI o LRU'dur. Uymuyorsa
- * dosyanın içindeki node adlarına bakılır ve kalıba uyan her node bir LRU olur. İkisi de
- * tutmazsa dosya ekipman sayılmaz ve atlanır (dış kabuk `modelRegistry.ts` ile verilir).
- *
- * Alt klasörler: `public/models/<uçakModeli>/...` gibi bir düzen kurulursa klasör adı
- * `group` olarak kaydedilir ve o modeller yalnızca ilgili uçak modeliyle eşleşir. Dosyalar
- * doğrudan `public/` altındaysa `group` boştur ve tüm uçaklar için geçerli olur.
+ * dosyanın içindeki node adlarına bakılır. İkisi de tutmazsa dosya ekipman sayılmaz.
  */
 
 import { readdir, writeFile, mkdir } from 'node:fs/promises'
@@ -44,6 +40,46 @@ const MODEL_EXTENSIONS = new Set(['.glb', '.gltf'])
 // Model olmayan içerik barındıran klasörler.
 const SKIP_DIRS = new Set(['mock-api'])
 const MIN_FIN_LENGTH = 4
+/** `ATA-24`, `ATA_24`, `ata24`, `24` — chapter kovası; uçak kapsamı (`group`) değildir. */
+const ATA_FOLDER_RE = /^(?:ata[-_]?)?(\d{2})$/i
+
+function ataChapterFromFolderName(name) {
+  const m = String(name).trim().match(ATA_FOLDER_RE)
+  return m?.[1] ?? ''
+}
+
+function pathFolders(relativePath) {
+  const parts = relativePath.split(sep).filter(Boolean)
+  parts.pop()
+  return parts
+}
+
+/**
+ * Uçak kapsamı. `models/` bir isim alanıdır, `ATA-24` bir chapter kovasıdır; ikisi de
+ * group olmaz. Kalan ilk klasör uçak modelidir (`public/models/OML/ATA-24/x.glb` -> OML).
+ */
+function groupOf(relativePath) {
+  let skipModels = true
+  for (const part of pathFolders(relativePath)) {
+    if (skipModels && part.toLowerCase() === 'models') {
+      skipModels = false
+      continue
+    }
+    skipModels = false
+    if (ataChapterFromFolderName(part)) continue
+    return part
+  }
+  return ''
+}
+
+function chapterFolderOf(relativePath) {
+  const folders = pathFolders(relativePath)
+  for (let i = folders.length - 1; i >= 0; i--) {
+    const code = ataChapterFromFolderName(folders[i])
+    if (code) return code
+  }
+  return ''
+}
 
 async function collectFiles(dir) {
   const out = []
@@ -106,14 +142,6 @@ function toUrl(relativePath) {
   return '/' + relativePath.split(sep).join('/')
 }
 
-/** İlk klasör adı gruptur; dosya doğrudan public/ altındaysa grup yoktur. */
-function groupOf(relativePath) {
-  const parts = relativePath.split(sep)
-  if (parts.length < 2) return ''
-  const [first] = parts
-  return first === 'models' ? (parts.length > 2 ? parts[1] : '') : first
-}
-
 const files = await collectFiles(PUBLIC_DIR)
 const models = []
 const skipped = []
@@ -122,11 +150,21 @@ for (const file of files.sort()) {
   const rel = relative(PUBLIC_DIR, file)
   const url = toUrl(rel)
   const group = groupOf(rel)
+  const folderChapter = chapterFolderOf(rel)
+
+  const applyFolderChapter = (parsed) => {
+    if (folderChapter && parsed.ataChapter !== folderChapter) {
+      console.warn(
+        `[scan-models] FIN ATA ${parsed.ataChapter} klasör ATA ${folderChapter} ile uyuşmuyor: ${rel} (${parsed.fin})`
+      )
+    }
+    return parsed
+  }
 
   // 1) Dosya adı FIN kalıbına uyuyorsa dosyanın tamamı tek bir LRU'dur.
   const fromFileName = parseLruName(basename(file, extname(file)))
   if (fromFileName) {
-    models.push({ ...fromFileName, group, url, node: '' })
+    models.push({ ...applyFolderChapter(fromFileName), group, url, node: '' })
     continue
   }
 
@@ -145,7 +183,7 @@ for (const file of files.sort()) {
   for (const name of nodeNames) {
     const parsed = parseLruName(name)
     if (!parsed) continue
-    models.push({ ...parsed, group, url, node: name })
+    models.push({ ...applyFolderChapter(parsed), group, url, node: name })
     found += 1
   }
   if (!found) skipped.push(rel)
@@ -189,7 +227,7 @@ export interface LruModel {
   ataChapter: string
   /** Panelde gösterilecek ad. */
   label: string
-  /** Uçak modeline göre kapsam (alt klasör adı). Boşsa tüm uçaklar için geçerli. */
+  /** Uçak modeline göre kapsam (public/models/OML/...). Boşsa tüm uçaklar için geçerli. ATA-24 klasörü group değildir. */
   group: string
   /** public/ köküne göre servis edilen yol. */
   url: string
