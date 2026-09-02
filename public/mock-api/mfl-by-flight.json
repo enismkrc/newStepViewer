@@ -1,5 +1,5 @@
 {
-  "_comment": "GEÇİCİ MOCK MFL. Gerçek backend flightId'leri buradaki anahtarlarla eşleşmezse 'default' kullanılır. finNumber = ekipman modelinin FIN numarasıdır ve ATA chapter FIN'in ilk iki hanesinden türetilir. İki paketleme de desteklenir: 2400MG001 kendi dosyasıdır (XXX2400MG001-missileRight.glb), 2700CM002 ise ATA-27.glb içindeki bir node'dur. FLT-401 ana senaryodur (her iki füze de arızalı; 2400MG001'de birden fazla kayıt, severity sırası critical > medium > low), FLT-403 karışık senaryodur (füze + aktüatör). severity ölçeği: critical > high > medium > low.",
+  "_comment": "GEÇİCİ MOCK MFL. Gerçek backend flightId'leri buradaki anahtarlarla eşleşmezse 'default' kullanılır. finNumber = ekipman modelinin FIN numarasıdır ve ATA chapter FIN'in ilk iki hanesinden türetilir. İki paketleme de desteklenir: 2400MG001 kendi dosyasıdır (_2400MG001_MISSILE-RIGHT.glb), 2700CM002 ise ATA-27.glb içindeki bir node'dur. FLT-401 ana senaryodur (her iki füze de arızalı; 2400MG001'de birden fazla kayıt, severity sırası critical > medium > low), FLT-403 karışık senaryodur (füze + aktüatör + generator). FIN'in kendi içinde tire barındırabildiği kasten iki biçimde denenir: FLT-403'te 2430G-001, FLT-402'de aynı ekipman 2430G001 olarak geçer; eşleştirme harf/rakam dışını attığı için ikisi de _2430G-001_GENERATOR_R.glb dosyasına bağlanır. severity ölçeği: critical > high > medium > low.",
   "default": {
     "mflDataList": [
       {
@@ -198,6 +198,33 @@
         "IruFieldName": "Pylon Interlock",
         "ataChapterId": "ata-24",
         "ataChapterCode": "24-00-00"
+      },
+      {
+        "mflMetaId": "MFL-2026-00202",
+        "lruFieldsMflId": "LF-00202",
+        "finNumber": "2430G001",
+        "absoluteTime": "2026-06-11T09:04:12Z",
+        "relativeTime": 552,
+        "faultCode": "24-301",
+        "ataChapter": "24",
+        "severity": "low",
+        "category": "ELECTRICAL",
+        "description": "Right generator load imbalance recorded during climb. Monitor on next flight.",
+        "location": "GENERATOR, R",
+        "flightId": "flight-102",
+        "FlightNo": "FLT-402",
+        "missionType": "FERRY",
+        "aircraftId": "aircraft-1",
+        "aircraftName": "TA-01",
+        "FleetId": "fleet-1",
+        "FleetName": "Test Fleet",
+        "fleetBase": "Ankara",
+        "IruModelId": "lm-24-30",
+        "IruModelName": "GEN-450",
+        "IruFieldId": "lf-24-301",
+        "IruFieldName": "Generator Load Balance",
+        "ataChapterId": "ata-24",
+        "ataChapterCode": "24-30-00"
       }
     ]
   },
@@ -256,6 +283,33 @@
         "IruFieldName": "Actuator Pos Feedback",
         "ataChapterId": "ata-27",
         "ataChapterCode": "27-50-00"
+      },
+      {
+        "mflMetaId": "MFL-2026-00212",
+        "lruFieldsMflId": "LF-00212",
+        "finNumber": "2430G-001",
+        "absoluteTime": "2026-06-11T11:23:47Z",
+        "relativeTime": 1046.5,
+        "faultCode": "24-305",
+        "ataChapter": "24",
+        "severity": "medium",
+        "category": "ELECTRICAL",
+        "description": "Right generator output voltage out of tolerance (26.4 V). Check GCU and field excitation.",
+        "location": "GENERATOR, R",
+        "flightId": "flight-103",
+        "FlightNo": "FLT-403",
+        "missionType": "TRAINING",
+        "aircraftId": "aircraft-1",
+        "aircraftName": "TA-01",
+        "FleetId": "fleet-1",
+        "FleetName": "Test Fleet",
+        "fleetBase": "Ankara",
+        "IruModelId": "lm-24-30",
+        "IruModelName": "GEN-450",
+        "IruFieldId": "lf-24-305",
+        "IruFieldName": "Generator Output Voltage",
+        "ataChapterId": "ata-24",
+        "ataChapterCode": "24-30-00"
       }
     ]
   },

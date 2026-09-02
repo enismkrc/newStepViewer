@@ -9,7 +9,7 @@
  *
  *   public/models/OML/aircraft-oml.glb   <- dış kabuk (ekipman sayılmaz)
  *   public/models/OML/ATA-24/
- *     XXX2400MG001-missileRight.glb      <- LRU başına bir dosya
+ *     _2400MG001_MISSILE-RIGHT.glb       <- LRU başına bir dosya
  *   public/models/OML/ATA-27/
  *     ATA-27.glb                         <- chapter assembly; LRU'lar node adından
  *
@@ -18,11 +18,15 @@
  *
  * İki paketleme biçimi aynı klasörde bir arada olabilir; adlandırma kuralı aynıdır.
  *
- *   XXX2400MG001-missileRight
- *   ^^^ tag (önemsiz)
- *      ^^^^^^^^^ FIN numarası  -> MFL kaydındaki finNumber ile eşleşir
- *      ^^ ATA chapter kodu
- *                ^^^^^^^^^^^^ ekranda gösterilecek ad
+ *   _2400MG001_MISSILE-RIGHT
+ *   ^ tag (önemsiz)
+ *    ^^^^^^^^^ FIN numarası  -> MFL kaydındaki finNumber ile eşleşir
+ *    ^^ ATA chapter kodu
+ *              ^^^^^^^^^^^^^ ekranda gösterilecek ad
+ *
+ * FIN ile ad arasındaki ayraç İLK ALT ÇİZGİdir: FIN kendi içinde tire
+ * (`_2430G-001_GENERATOR_R` -> FIN `2430G-001`), ad ise alt çizgi (`GENERATOR_R`)
+ * barındırabilir.
  *
  * Karar sırası: dosya adı FIN kalıbına uyuyorsa dosyanın TAMAMI o LRU'dur. Uymuyorsa
  * dosyanın içindeki node adlarına bakılır. İkisi de tutmazsa dosya ekipman sayılmaz.
@@ -101,18 +105,19 @@ async function collectFiles(dir) {
   return out
 }
 
-/** `missileRight` -> `Missile Right`, `ACTUATOR1` -> `Actuator 1`. */
+/**
+ * Ekranda gösterilecek ad. Ayraçlar boşluğa çevrilir, kelime/rakam sınırları ayrılır ve
+ * ad tümüyle BÜYÜK HARF yazılır: `MISSILE-RIGHT` -> `MISSILE RIGHT`,
+ * `GENERATOR_R` -> `GENERATOR R`, `ACTUATOR1` -> `ACTUATOR 1`.
+ */
 function humanize(raw) {
-  let s = String(raw).replace(/[_.]+/g, ' ').trim()
-  if (!s) return ''
-  // CAD adları genelde tümü büyük harf olur; okunur hale getirmek için küçültülür.
-  if (!/[a-z]/.test(s)) s = s.toLowerCase()
-  s = s
+  return String(raw)
+    .replace(/[-_.]+/g, ' ')
     .replace(/([a-z\d])([A-Z])/g, '$1 $2')
     .replace(/([A-Za-z])(\d)/g, '$1 $2')
     .replace(/\s+/g, ' ')
     .trim()
-  return s.replace(/\b\w/g, (c) => c.toUpperCase())
+    .toUpperCase()
 }
 
 /**
@@ -120,17 +125,18 @@ function humanize(raw) {
  * Kalıba uymuyorsa null döner.
  */
 export function parseLruName(raw) {
-  // Baştaki tag'i (rakam olmayan karakterler) at.
+  // Baştaki tag'i (rakam olmayan karakterler: `_`, `_FLT`, ...) at.
   const afterTag = String(raw).replace(/^\D*/, '')
   if (!afterTag) return null
 
-  const dashAt = afterTag.indexOf('-')
-  const fin = (dashAt === -1 ? afterTag : afterTag.slice(0, dashAt)).trim()
+  // Ayraç ilk alt çizgidir; FIN'in içindeki tire FIN'e aittir (`2430G-001`).
+  const sepAt = afterTag.indexOf('_')
+  const fin = (sepAt === -1 ? afterTag : afterTag.slice(0, sepAt)).trim()
   // İki hane chapter + gövde. Uzunluk alt sınırı, adında rakam geçen dosyaların
   // (örn. `ATA-27.glb` -> "27") yanlışlıkla FIN sanılmasını engeller.
   if (!/^\d{2}/.test(fin) || fin.length < MIN_FIN_LENGTH) return null
 
-  const rest = dashAt === -1 ? '' : afterTag.slice(dashAt + 1)
+  const rest = sepAt === -1 ? '' : afterTag.slice(sepAt + 1)
   return {
     fin: fin.toUpperCase(),
     ataChapter: fin.slice(0, 2),

@@ -92,8 +92,9 @@ Ekipmanlar iki şekilde paketlenebilir; ikisi de aynı anda kullanılabilir:
 **1) LRU başına bir dosya** — chapter klasöründe onlarca GLB:
 
 ```
-public/models/OML/ATA-24/XXX2400MG001-missileRight.glb
-public/models/OML/ATA-24/XXX2400MG002-missileLeft.glb
+public/models/OML/ATA-24/_2400MG001_MISSILE-RIGHT.glb
+public/models/OML/ATA-24/_2400MG002_MISSILE-LEFT.glb
+public/models/OML/ATA-24/_2430G-001_GENERATOR_R.glb
 ```
 
 **2) Chapter başına tek assembly** — birden fazla LRU'yu barındırır, ayrım node adlarından
@@ -102,9 +103,9 @@ yapılır:
 ```
 public/models/OML/ATA-27/ATA-27.glb
   ATA27                        <- gövde node'u, FIN taşımaz, yok sayılır
-    _FLT2700CM001-ACTUATOR1
-    _FLT2700CM002-ACTUATOR2
-    _FLT2700CM003-ACTUATOR3
+    _2700CM001_ACTUATOR-1
+    _2700CM002_ACTUATOR-2
+    _2700CM003_ACTUATOR-3
 ```
 
 İkisi aynı klasörde bir arada olabilir. Klasör adı (`ATA-24`, `ATA_24`, `24`) yalnızca
@@ -113,15 +114,25 @@ düzen içindir; FIN hâlâ dosya veya node adından okunur. `ATA-24` bir uçak 
 ### Adlandırma sözleşmesi (hem dosya adı hem node adı)
 
 ```
-XXX2400MG001-missileRight
-^^^ tag (önemsiz)
-   ^^^^^^^^^ FIN numarası — MFL kaydındaki finNumber ile eşleşir
-   ^^ ATA chapter kodu
-             ^^^^^^^^^^^^ panelde gösterilecek ad
+_2400MG001_MISSILE-RIGHT
+^ tag (önemsiz)
+ ^^^^^^^^^ FIN numarası — MFL kaydındaki finNumber ile eşleşir
+ ^^ ATA chapter kodu
+           ^^^^^^^^^^^^^ panelde gösterilecek ad
 ```
 
-Kural: baştaki rakam olmayan karakterler atılır, ilk tireye kadarı FIN'dir, FIN'in ilk iki
-hanesi ATA chapter'dır.
+Kural: baştaki rakam olmayan karakterler (`_`, `_FLT`, ...) atılır, **ilk alt çizgiye**
+kadarı FIN'dir, FIN'in ilk iki hanesi ATA chapter'dır.
+
+Ayraç tire değil alt çizgidir; çünkü FIN'in kendisi tire barındırabilir ve ad da alt çizgi
+barındırabilir:
+
+```
+_2430G-001_GENERATOR_R   ->  FIN "2430G-001", ad "Generator R", chapter 24
+```
+
+Eşleştirmede FIN harf/rakam dışındaki karakterler atılarak karşılaştırılır, yani MFL
+`finNumber` alanı `2430G-001` de `2430G001` de olsa aynı parçaya bağlanır.
 
 Karar sırası: **dosya adı** kalıba uyuyorsa dosyanın tamamı o LRU'dur. Uymuyorsa dosyanın
 içindeki **node adlarına** bakılır ve kalıba uyan her node bağımsız bir LRU olur. İkisi de
@@ -150,7 +161,7 @@ sisteminde** gelir. Görüntüleyici her mesh'in world matrisini geometriye bake
 dosyalar aynı sahneye yüklendiğinde kendiliğinden doğru yerlerine oturur; elle hizalama
 yapılmaz. Şart tek: tüm dosyalar aynı orijin ve ölçekle export edilmiş olmalı.
 
-Bunu doğrulamak için: `npm run models:inspect public/models/OML/aircraft-oml.glb public/models/OML/ATA-24/XXX2400MG001-missileRight.glb`
+Bunu doğrulamak için: `npm run models:inspect public/models/OML/aircraft-oml.glb public/models/OML/ATA-24/_2400MG001_MISSILE-RIGHT.glb`
 Her dosyanın dünya koordinatlarındaki sınır kutusunu basar; ekipmanların kutuları kabuğun
 kutusunun içinde kalmalıdır.
 
@@ -372,8 +383,8 @@ Router otomatik uyumludur (`createWebHistory(import.meta.env.BASE_URL)`).
 1. **Model dosyaları repoda yok.** `public/models/OML/aircraft-oml.glb` ve ekipman GLB'lerini elle
    eklemelisiniz (adım 2). Aksi halde görüntüleyici boş açılır.
 2. **`finNumber` ↔ ekipman adı eşleşmesi.** Backend'in `finNumber` değeri, ekipman modelinin
-   adındaki FIN ile birebir aynı olmalı — dosya adı (`2400MG001` ↔ `XXX2400MG001-*.glb`) ya
-   da node adı (`2700CM002` ↔ `_FLT2700CM002-ACTUATOR2`). Farklıysa o ekipman yüklenmez ve
+   adındaki FIN ile aynı olmalı — dosya adı (`2400MG001` ↔ `_2400MG001_*.glb`) ya
+   da node adı (`2700CM002` ↔ `_2700CM002_ACTUATOR-2`). Farklıysa o ekipman yüklenmez ve
    kırmızı vurgu çalışmaz.
    *Öneri:* Backend ekibiyle FIN biçimini (büyük/küçük harf, dolgu sıfırları) baştan netleştirin.
 3. **LRU kullanılmıyor (karar).** `HmsViewerPage.vue` görüntüleyiciye `:lru-list="[]"`

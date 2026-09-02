@@ -679,7 +679,7 @@ function partInfoFor(key: string | null | undefined): PartInfo | null {
 
 /**
  * MFL records belonging to a FIN. `key` ham FIN de olabilir, tam node adı da
- * ("_FLT2420MG002 - INVERTER, L"); ikisi de aynı anahtara indirgenir.
+ * ("_2430G-001_GENERATOR_R"); ikisi de aynı anahtara indirgenir.
  */
 function recordsForKey(key: string | null | undefined): NormalizedMflRecord[] {
   const finKey = finKeyOf(key)
@@ -689,7 +689,7 @@ function recordsForKey(key: string | null | undefined): NormalizedMflRecord[] {
 
 /**
  * Build a compact fault summary card from the fault's MFL records plus the part name
- * parsed out of the model node (`_FLT2420MG002 - INVERTER, L` -> FIN + "INVERTER, L").
+ * parsed out of the model node (`_2430G-001_GENERATOR_R` -> FIN + "GENERATOR R").
  * Shown on hover (pin / list row) and at the top of the part detail panel.
  */
 function makeFaultCard(def: FaultDef): FaultCard {
@@ -700,8 +700,11 @@ function makeFaultCard(def: FaultDef): FaultCard {
 
   const fin = info?.fin || fallback.fin
   const hasFin = info ? info.hasFin : fallback.hasFin
-  let lruName = info?.label || lruRowFor(def.key)?.label || primary?.lruFieldName || primary?.lruModelName || def.key
-  if (hasFin && lruName === fin) lruName = ''
+  // Model kaynaklı adlar zaten büyük harf; MFL'den gelen yedekler için burada eşitlenir.
+  let lruName = (
+    info?.label || lruRowFor(def.key)?.label || primary?.lruFieldName || primary?.lruModelName || def.key
+  ).toUpperCase()
+  if (hasFin && lruName === fin.toUpperCase()) lruName = ''
 
   return {
     fin,
@@ -1335,8 +1338,8 @@ function meshMatchesPart(mesh: THREE.Object3D | null, name: string): boolean {
 
 /**
  * True if `key` identifies this mesh either by exact node/assembly name or by FIN.
- * MFL faults arrive as a `finNumber` (e.g. "2420MG002") while the model node is named
- * "_FLT2420MG002 - INVERTER, L", so every lookup goes through the normalized FIN too.
+ * MFL faults arrive as a `finNumber` (e.g. "2430G-001") while the model node is named
+ * "_2430G-001_GENERATOR_R", so every lookup goes through the normalized FIN too.
  */
 function meshMatchesKey(mesh: THREE.Object3D | null, key: string): boolean {
   if (!key || !mesh) return false

@@ -1,9 +1,10 @@
 /**
  * Parça (glTF node) adı çözümlemesi.
  *
- * Model parçaları `_FLT2420MG002 - INVERTER, L` kalıbıyla isimlendirilmiştir:
- *   "-" öncesi  -> FIN numarası (opsiyonel `_FLT` öneki ile)
- *   "-" sonrası -> parçanın okunabilir adı
+ * Model parçaları `_2430G-001_GENERATOR_R` kalıbıyla isimlendirilmiştir:
+ *   baştaki `_` (ya da `_FLT` gibi) önek -> atılır
+ *   ilk "_" öncesi  -> FIN numarası; kendi içinde tire barındırabilir (`2430G-001`)
+ *   ilk "_" sonrası -> parçanın okunabilir adı (`MISSILE-RIGHT`, `GENERATOR_R`)
  *
  * MFL kayıtlarındaki `finNumber` alanı bu FIN ile eşleştirilerek parça highlight edilir.
  */
@@ -11,24 +12,38 @@
 export interface ParsedPartName {
   /** Ham glTF node adı. */
   raw: string
-  /** Gösterim için FIN (ör. "2420MG002"). Ad `FIN - AD` kalıbına uymuyorsa boş. */
+  /** Gösterim için FIN (ör. "2430G-001"). Ad `FIN_AD` kalıbına uymuyorsa boş. */
   fin: string
   /** Eşleştirme anahtarı: büyük harf, yalnızca harf+rakam, `FLT` öneki atılmış. */
   finKey: string
-  /** Kullanıcıya gösterilecek parça adı (ör. "INVERTER, L"). */
+  /** Kullanıcıya gösterilecek parça adı; daima büyük harf (ör. "GENERATOR R"). */
   label: string
-  /** Ad gerçekten `FIN - AD` kalıbına uyuyor mu. */
+  /** Ad gerçekten `FIN_AD` kalıbına uyuyor mu. */
   hasFin: boolean
 }
 
 /**
  * FIN değerlerini karşılaştırılabilir hale getirir: harf/rakam dışındaki her karakter
- * atılır, büyük harfe çevrilir ve `FLT` öneki kaldırılır. Böylece "_FLT2420MG002",
- * "FLT-2420MG002" ve "2420MG002" aynı anahtara indirgenir.
+ * atılır, büyük harfe çevrilir ve `FLT` öneki kaldırılır. Böylece "_2430G-001",
+ * "2430G-001" ve "2430G001" aynı anahtara indirgenir; FIN içindeki tire MFL'den
+ * gelen değerde olsa da olmasa da eşleşme bozulmaz.
  */
 export function normalizeFin(value: string | null | undefined): string {
   const cleaned = String(value ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '')
   return cleaned.startsWith('FLT') ? cleaned.slice(3) : cleaned
+}
+
+/**
+ * Parça adını gösterim biçimine çevirir: ayraçlar (`-`, `_`, `.`) boşluk olur ve ad
+ * tümüyle BÜYÜK HARF yazılır ("GENERATOR_R" -> "GENERATOR R", "ACTUATOR-1" ->
+ * "ACTUATOR 1"). Ekipman listesindeki adlarla aynı biçimi verir.
+ */
+export function partLabel(value: string | null | undefined): string {
+  return String(value ?? '')
+    .replace(/[-_.]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase()
 }
 
 /** Gösterim FIN'i: baştaki `_` ve `FLT` öneki atılır, geri kalanı olduğu gibi korunur. */
@@ -41,16 +56,18 @@ export function displayFin(value: string | null | undefined): string {
 }
 
 /**
- * Adı FIN ve okunabilir ad olarak ikiye ayırır. Önce boşluklu ayraç (" - ") denenir;
- * böylece FIN'in kendi içinde tire barındırdığı ("FLT-2420MG002 - INVERTER") adlar da
- * doğru bölünür.
+ * Adı FIN ve okunabilir ad olarak ikiye ayırır. Ayraç, baştaki `_` öneki atıldıktan
+ * sonraki İLK alt çizgidir: FIN kendi içinde tire ("2430G-001"), ad ise alt çizgi
+ * ("GENERATOR_R") barındırabildiği için bölme noktası başka bir yer olamaz.
  */
 function splitName(value: string): [string, string] | null {
-  const spaced = value.match(/^(.+?)\s+[-–—]\s+(.+)$/)
-  if (spaced) return [spaced[1]!, spaced[2]!]
-  const tight = value.match(/^([^-–—]+)[-–—](.+)$/)
-  if (tight) return [tight[1]!, tight[2]!]
-  return null
+  const body = value.replace(/^[_\s]+/, '')
+  const at = body.indexOf('_')
+  if (at <= 0) return null
+  const fin = body.slice(0, at).trim()
+  const label = body.slice(at + 1).trim()
+  if (!fin || !label) return null
+  return [fin, label]
 }
 
 /** Bir metnin FIN kodu olma ihtimali: boşluk içermez ve en az bir rakam taşır. */
@@ -60,11 +77,11 @@ function looksLikeFin(value: string): boolean {
 
 /**
  * Herhangi bir değerden eşleştirme anahtarını üretir; girdi ister ham FIN
- * ("2420MG002", "_FLT2420MG002") ister tam node adı ("_FLT2420MG002 - INVERTER, L")
+ * ("2430G-001", "_2430G-001") ister tam node adı ("_2430G-001_GENERATOR_R")
  * olsun aynı anahtarı döndürür.
  *
  * DİKKAT: `normalizeFin` bunu yapmaz — tam node adına uygulanırsa FIN ile parça adını
- * birleştirip ("2420MG002INVERTERL") yanlış anahtar üretir. Eşleştirmede daima bu
+ * birleştirip ("2430G001GENERATORR") yanlış anahtar üretir. Eşleştirmede daima bu
  * fonksiyon kullanılmalıdır.
  */
 export function finKeyOf(value: string | null | undefined): string {
@@ -78,9 +95,9 @@ export function parsePartName(raw: string | null | undefined): ParsedPartName {
   const tail = parts ? parts[1].trim() : ''
 
   if (!parts || !tail || !looksLikeFin(head)) {
-    return { raw: value, fin: '', finKey: normalizeFin(value), label: value, hasFin: false }
+    return { raw: value, fin: '', finKey: normalizeFin(value), label: partLabel(value), hasFin: false }
   }
-  return { raw: value, fin: displayFin(head), finKey: normalizeFin(head), label: tail, hasFin: true }
+  return { raw: value, fin: displayFin(head), finKey: normalizeFin(head), label: partLabel(tail), hasFin: true }
 }
 
 /**
