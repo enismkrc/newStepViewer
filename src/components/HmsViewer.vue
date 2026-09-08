@@ -242,7 +242,7 @@
               <dt>Category</dt>
               <dd>{{ dash(m.category) }}</dd>
               <dt>ATA Chapter</dt>
-              <dd>{{ dash(m.ataChapterCode) }}</dd>
+              <dd>{{ dash(ataChapterDisplay(m)) }}</dd>
               <dt>Absolute Time</dt>
               <dd>{{ formatDateTime(m.absoluteTime) }}</dd>
             </dl>
@@ -659,6 +659,14 @@ function severityClass(severity: string | null | undefined): string {
 function dash(value: string | number | null | undefined) {
   const s = value === null || value === undefined ? '' : String(value).trim()
   return s || '—'
+}
+
+/** ATA kodu + `category` açıklaması; açıklama yoksa yalnızca kod. */
+function ataChapterDisplay(m: NormalizedMflRecord) {
+  const code = (m.ataChapter || m.ataChapterCode).trim()
+  const label = m.ataChapterLabel.trim()
+  if (code && label) return `${code} — ${label}`
+  return code || label
 }
 
 /** ISO timestamps are shown as readable UTC; anything else is passed through. */

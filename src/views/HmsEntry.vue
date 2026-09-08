@@ -216,9 +216,9 @@ async function loadAtaForFlight(flightId: string) {
   loadError.value = ''
   try {
     const mfl = await getFilteredMflData(flightId)
-    ataOptions.value = uniqueAtaChapters(mfl).map((code) => ({
+    ataOptions.value = uniqueAtaChapters(mfl).map(({ code, label }) => ({
       code,
-      label: `${code} — ${chapterLabel(code)}`
+      label: `${code} — ${label || chapterLabel(code)}`
     }))
     // Tek chapter varsa rol seçimi belirsiz değil; otomatik işaretle.
     if (ataOptions.value.length === 1) {

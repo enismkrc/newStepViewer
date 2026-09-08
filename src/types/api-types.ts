@@ -52,6 +52,10 @@ export interface MflRecord {
   relativeTime?: number | string
   faultCode?: string
   severity?: string
+  /**
+   * ATA chapter kodu + açıklama. Örnek: "24 Electrical Power System ".
+   * Kod ve etiket buradan parse edilir (bkz. `parseAtaFromCategory` @/api/mfl).
+   */
   category?: string
   description?: string
   location?: string
@@ -77,7 +81,7 @@ export interface MflRecord {
   ataChapterId?: string
   ataChapterCode?: string
   /**
-   * ATA chapter kodu (örn. "24"). Backend doldurmazsa FIN'in veya faultCode'un
+   * ATA chapter kodu (örn. "24"). Asıl kaynak `category`; yoksa FIN / faultCode
    * ilk iki hanesinden türetilir (bkz. `resolveAtaChapter` @/api/mfl).
    */
   ataChapter?: string
@@ -98,7 +102,11 @@ export interface NormalizedMflRecord {
   location: string
   absoluteTime: string
   relativeTime: string
+  /** İki haneli ATA chapter (örn. "24"), `category`'den. */
+  ataChapter: string
   ataChapterCode: string
+  /** `category` içindeki ATA açıklaması (örn. "Electrical Power System"). */
+  ataChapterLabel: string
   lruModelName: string
   lruFieldName: string
   flightNo: string
@@ -118,6 +126,8 @@ export interface Fault {
   warningFaults: string
   /** Bu arızanın ait olduğu ATA chapter kodu (örn. "24"). Bilinmiyorsa boş. */
   ataChapter?: string
+  /** `category` içindeki ATA açıklaması (örn. "Electrical Power System"). */
+  ataChapterLabel?: string
   records: NormalizedMflRecord[]
 }
 

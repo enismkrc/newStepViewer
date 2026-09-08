@@ -34,7 +34,7 @@ import { ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { getAircraftById } from '../api/fleet'
 import { findFlightsByAircraftId } from '../api/flight'
-import { getFilteredMflData, mflListToFaults, flattenMflForViewer, parseAtaChapterQuery, filterMflByAtaChapters } from '../api/mfl'
+import { getFilteredMflData, mflListToFaults, flattenMflForViewer, parseAtaChapterQuery, filterMflByAtaChapters, uniqueAtaChapters } from '../api/mfl'
 import { attachModel } from '../config/modelRegistry'
 import { resolveLruModels, groupByChapter } from '../config/ataChapterRegistry'
 import HmsViewer from '../components/HmsViewer.vue'
@@ -73,9 +73,14 @@ const model = computed<{ modelUrl: string; viewConfig: ViewConfigPartial | null 
  */
 const ataChapters = computed(() => {
   const groups = groupByChapter(resolveLruModels(aircraft.value))
+  const labels = new Map(uniqueAtaChapters(mflRaw.value).map((o) => [o.code, o.label]))
+  const withMflLabels = groups.map((group) => {
+    const fromMfl = (labels.get(group.code) ?? '').trim()
+    return fromMfl ? { ...group, label: fromMfl } : group
+  })
   const selected = selectedAtaCodes.value
-  if (!selected.length) return groups
-  return groups.filter((group) => selected.includes(group.code))
+  if (!selected.length) return withMflLabels
+  return withMflLabels.filter((group) => selected.includes(group.code))
 })
 
 async function loadViewerData(aircraftId: string, fId: string) {

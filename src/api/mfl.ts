@@ -64,16 +64,41 @@ function firstText(...values: Array<string | number | null | undefined>): string
   return ''
 }
 
+export interface AtaChapterOption {
+  /** İki haneli ATA chapter kodu (örn. "24"). */
+  code: string
+  /** `category` içindeki açıklama (örn. "Electrical Power System"). */
+  label: string
+}
+
+/**
+ * MFL `category` alanından ATA kodu ve açıklamasını ayırır.
+ * Örnek: "24 Electrical Power System " → { code: "24", label: "Electrical Power System" }.
+ * Eşleşmezse null (eski "ELECTRICAL" gibi düz metinler).
+ */
+export function parseAtaFromCategory(category: string | null | undefined): AtaChapterOption | null {
+  const text = String(category ?? '').trim()
+  if (!text) return null
+  const match = text.match(/^(\d{2})\s+(.+)$/)
+  if (!match) return null
+  const code = match[1] ?? ''
+  const label = (match[2] ?? '').trim()
+  if (!code || !label) return null
+  return { code, label }
+}
+
 /**
  * Bir MFL kaydının ATA chapter kodunu çözer. Sırayla:
  *
- *   1. Backend'in `ataChapter` alanı (eklendiğinde tek doğru kaynak olur).
- *   2. `ataChapterCode` / `ataChapterId` içindeki ilk iki hane ("24-00-00" → "24").
- *   3. FIN numarasının ilk iki hanesi — "2400MG001" → "24". Ekipman GLB dosyaları da
- *      FIN'e göre adlandırıldığı için asıl sözleşme budur.
- *   4. `faultCode`'un ilk iki hanesi — "32-021" → "32". Eski/adlandırılmamış kayıtlar için.
+ *   1. `category` — "24 Electrical Power System " → "24" (backend'in gönderdiği asıl kaynak).
+ *   2. Backend'in `ataChapter` alanı.
+ *   3. `ataChapterCode` / `ataChapterId` içindeki ilk iki hane ("24-00-00" → "24").
+ *   4. FIN numarasının ilk iki hanesi — "2400MG001" → "24".
+ *   5. `faultCode`'un ilk iki hanesi — "32-021" → "32". Eski/adlandırılmamış kayıtlar için.
  */
 export function resolveAtaChapter(row: MflRecord): string {
+  const fromCategory = parseAtaFromCategory(row.category)
+  if (fromCategory) return fromCategory.code
   const explicit = firstText(row.ataChapter).match(/(\d{2})/)
   if (explicit) return explicit[1] ?? ''
   const fromCode = firstText(row.ataChapterCode, row.ataChapterId).match(/(\d{2})/)
@@ -84,14 +109,27 @@ export function resolveAtaChapter(row: MflRecord): string {
   return fromFault?.[1] ?? ''
 }
 
-/** Bir uçuşun MFL kayıtlarında görünen benzersiz ATA chapter kodları (örn. "24", "27"). */
-export function uniqueAtaChapters(mflList: MflRecord[]): string[] {
-  const codes = new Set<string>()
+/** `category` içindeki ATA açıklaması; yoksa boş string. */
+export function resolveAtaLabel(row: MflRecord): string {
+  return parseAtaFromCategory(row.category)?.label ?? ''
+}
+
+/**
+ * Bir uçuşun MFL kayıtlarında görünen benzersiz ATA chapter'ları.
+ * Etiket `category` açıklamasından gelir; aynı kod için ilk dolu etiket tutulur.
+ */
+export function uniqueAtaChapters(mflList: MflRecord[]): AtaChapterOption[] {
+  const byCode = new Map<string, string>()
   for (const row of mflList) {
     const code = resolveAtaChapter(row)
-    if (code) codes.add(code)
+    if (!code) continue
+    const label = resolveAtaLabel(row)
+    const existing = byCode.get(code)
+    if (existing === undefined || (!existing && label)) byCode.set(code, label)
   }
-  return Array.from(codes).sort((a, b) => a.localeCompare(b))
+  return Array.from(byCode.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([code, label]) => ({ code, label }))
 }
 
 /**
@@ -135,11 +173,13 @@ export function mflListToFaults(mflList: MflRecord[]): Fault[] {
         status: row.severity ?? 'FAULT',
         warningFaults: row.description ?? '',
         ataChapter: resolveAtaChapter(row),
+        ataChapterLabel: resolveAtaLabel(row),
         records: []
       })
     }
     const fault = byFin.get(key)!
     if (!fault.ataChapter) fault.ataChapter = resolveAtaChapter(row)
+    if (!fault.ataChapterLabel) fault.ataChapterLabel = resolveAtaLabel(row)
     fault.records.push(normalizeMflRecord(row, index))
   })
   return Array.from(byFin.values())
@@ -149,6 +189,7 @@ export function normalizeMflRecord(row: MflRecord, index = 0): NormalizedMflReco
   const fin = String(row.finNumber ?? '').trim()
   const faultCode = firstText(row.faultCode)
   const mflMetaId = firstText(row.mflMetaId)
+  const ataChapter = resolveAtaChapter(row)
   return {
     id: firstText(mflMetaId, row.lruFieldsMflId) || `${fin}:${faultCode}:${index}`,
     fin,
@@ -160,7 +201,9 @@ export function normalizeMflRecord(row: MflRecord, index = 0): NormalizedMflReco
     location: firstText(row.location),
     absoluteTime: firstText(row.absoluteTime),
     relativeTime: firstText(row.relativeTime),
-    ataChapterCode: firstText(row.ataChapterCode, row.ataChapterId, resolveAtaChapter(row)),
+    ataChapter,
+    ataChapterCode: firstText(row.ataChapterCode, row.ataChapterId, ataChapter),
+    ataChapterLabel: resolveAtaLabel(row),
     lruModelName: firstText(row.IruModelName, row.lruModelName),
     lruFieldName: firstText(row.IruFieldName, row.lruFieldName),
     flightNo: firstText(row.FlightNo, row.flightNo),
